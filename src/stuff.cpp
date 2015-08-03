@@ -119,10 +119,8 @@ class SimulationObject
 
                 btRigidBody *body;
 
-                void draw_buffer();
+                void draw_buffer(btTransform);
 };
-
-SimulationObject *player;
 
 void gl_error()
 {
@@ -258,8 +256,7 @@ class SimulationContext
         std::vector<Material> materials;
         std::vector<Camera> cameras;
 
-
-        void hold_object(int, int);
+        SimulationObject *player;
 
         float near, far, fov, aspect;
 
@@ -267,11 +264,12 @@ class SimulationContext
 
         btRigidBody *held_object = NULL;
 
-        int width, height;
-        SDL_Surface *screen_surface;
-        SDL_Rect **video_modes;
+        int width;
+        int height;
         int mode;
         int input[7];
+        SDL_Surface *screen_surface;
+        SDL_Rect **video_modes;
         glm::vec3 forward;
         glm::mat4 camera_rotation;
 
@@ -281,7 +279,7 @@ class SimulationContext
 
         char path[256];
 
-        btRigidBody *RayTrace(int, int);
+        btRigidBody *FirstCollisionRayTrace(int, int);
         void ReadAssets(const struct aiScene*);
         void CollisionRoutine(void);
 
@@ -355,7 +353,7 @@ class SimulationContext
 
                 if (m_fileLoader->loadFile(physics_file))
                 {
-                        printf("deserializing bullet physics file %s\n%d\tconstraints\n%d\trigid bodies\n", 
+                        printf("Loading physics from %s....\n%d\tconstraints\n%d\trigid bodies\n", 
                                         physics_file, m_fileLoader->getNumConstraints(), m_fileLoader->getNumRigidBodies());
                         for(int i=0; i < m_fileLoader->getNumRigidBodies(); i++)
                         {
@@ -379,37 +377,33 @@ class SimulationContext
                                 yaw = 0;
                                 fov = cam.fov;
                                 aspect = cam.aspect;
-                                near = cam.near;
+                                near = 0.01;
                                 far = 10000.0;
 
-                                btTransform t;  
-                                t.setFromOpenGLMatrix(glm::value_ptr(glm::transpose(cam.world)));
-                                btCapsuleShape *player_shape=new btCapsuleShape(1.0, 2.0);
+                                float capsule_height = 2.0;
+                                float capsule_radius = 1.5;
+
+                                btCapsuleShape *player_shape=new btCapsuleShape(capsule_radius, capsule_height);
+
                                 float player_mass = 5.0;
                                 btVector3 inertia(0,0,0);
                                 player_shape->calculateLocalInertia(player_mass,inertia);
+
+                                btTransform t;  
+                                t.setFromOpenGLMatrix(glm::value_ptr(glm::transpose(cam.world)));
                                 btMotionState* motion=new btDefaultMotionState(t);
+
                                 btRigidBody::btRigidBodyConstructionInfo info(player_mass,motion,player_shape,inertia);
                                 btRigidBody* player_body=new btRigidBody(info);
-                                player_body->setCollisionFlags( btCollisionObject::CF_CHARACTER_OBJECT);
+
+                                //player_body->setCollisionFlags( btCollisionObject::CF_CHARACTER_OBJECT);
                                 player_body->setSleepingThresholds(0.0, 0.0);
                                 player_body->setAngularFactor(0.0);
-                                world->addRigidBody(player_body);
-                                player = new SimulationObject("_Sphere", player_body, NULL);
 
+                                world->addRigidBody(player_body);
+
+                                player = new SimulationObject("Player", player_body, NULL);
                         } 
-                        /*
-                           if (player)
-                           {
-                           float mat[16];
-                           btTransform t = player->body->getWorldTransform();
-                           t.getOpenGLMatrix(mat);
-                           player->body->setCollisionFlags( btCollisionObject::CF_CHARACTER_OBJECT);
-                           printf("Player pos adding to bullet? %f %f %f\n", t.getOrigin().getX(), t.getOrigin().getY(), t.getOrigin().getZ()); 
-                           world->addRigidBody(player->body);
-                           printf("Adding player\n");
-                           }
-                           */
                 }
         }
         ~SimulationContext()
@@ -504,7 +498,8 @@ struct aiNode *findnode(struct aiNode *node, const char *name)
 
 void SimulationContext::ReadAssets(const struct aiScene *scene)
 {
-        fprintf(stderr, "\nReading scene...\n%d\tmeshes\n%d\tmaterials\n%d\tcameras\n", scene->mNumMeshes, scene->mNumMaterials, scene->mNumCameras);
+        fprintf(stderr, "\nReading scene...\n%d\tmeshes\n%d\tmaterials\n%d\tcameras\n", 
+                        scene->mNumMeshes, scene->mNumMaterials, scene->mNumCameras);
         for (unsigned int i = 0; i < scene->mNumMaterials; i++)
         {
                 Material material;
@@ -577,48 +572,6 @@ void SimulationContext::ReadAssets(const struct aiScene *scene)
                         fprintf(stderr, "Could not find cam %s in scene graph\n", cam.name);
                 } 
         }
-
-        /*
-           assert(scene->mNumCameras == 1);
-           for (unsigned int i = 0; i < scene->mNumCameras; i++)
-           {
-           aiCamera *camera = scene->mCameras[i];
-           fov = camera->mHorizontalFOV * 57.2957795;
-           near = camera->mClipPlaneNear;
-           far = camera->mClipPlaneFar;
-           printf("Camera near %f far %f fov %f", near, far, fov);
-           far = 1000;
-           aspect = camera->mAspect;
-           printf("%f %f %f \n", fov, near, far);
-           struct aiNode *node = findnode(scene->mRootNode, scene->mCameras[i]->mName.C_Str());
-           if (node)
-           {
-           float mat[16];
-           transposematrix(mat, &node->mTransformation);
-           {
-           btTransform t;  
-           t.setIdentity();
-           t.setFromOpenGLMatrix(mat);
-           pitch = 0;
-           yaw = 0;
-           float rad = 1.5, mass = 5.0;
-           btCapsuleShape *player_shape=new btCapsuleShape(rad, 2);
-           btVector3 inertia(0,0,0);
-           if(mass!=0.0)
-           player_shape->calculateLocalInertia(mass,inertia);
-
-           btMotionState* motion=new btDefaultMotionState(t);
-           btRigidBody::btRigidBodyConstructionInfo info(mass,motion,player_shape,inertia);
-           btRigidBody* body=new btRigidBody(info);
-           body->forceActivationState(DISABLE_DEACTIVATION);
-           body->setSleepingThresholds(0.0, 0.0);
-           body->setAngularFactor(0.0);
-           world->addRigidBody(body);
-           player = new SimulationObject("_Sphere", body, NULL);
-           }
-           } 
-           }
-           */
 };
 
 void SimulationContext::Draw()
@@ -626,6 +579,7 @@ void SimulationContext::Draw()
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glClearColor(1,0,0,1);
         float mat[16];
+
         btTransform t = player->body->getWorldTransform();
         t.getOpenGLMatrix(mat);
 
@@ -639,7 +593,7 @@ void SimulationContext::Draw()
         glDepthMask(GL_TRUE);
         for (SimulationObject *object : objects)
         {
-                object->draw_buffer();
+                object->draw_buffer(t);
         }
 
         //glDisable(GL_CULL_FACE);
@@ -807,11 +761,11 @@ void SimulationContext::UpdatePosition()
                         held_object->setLinearVelocity(_vb * 5.0);
                 }
         }
-        else {
+        else 
+        {
                 held_object = NULL;
         }
 
-        player->body->applyCentralForce(velocity);
         player->body->setLinearVelocity(velocity);
 }
 
@@ -863,7 +817,7 @@ void SimulationContext::Loop()
                 PollInput();
                 UpdatePosition();
                 Draw();
-                btRigidBody *collisionBody = RayTrace(width/2, height/2);
+                btRigidBody *collisionBody = FirstCollisionRayTrace(width/2, height/2);
                 if (collisionBody && !held_object)
                 {
                         for (SimulationObject *o : objects)
@@ -908,41 +862,29 @@ int main( int argc, char *argv[] )
 
 void renderSphere(btRigidBody* sphere);
 
-btRigidBody *SimulationContext::RayTrace(int x, int y)
+btRigidBody *SimulationContext::FirstCollisionRayTrace(int x, int y)
 {
-        glm::vec4 lRayStart_NDC(
-                        ((float)x/(float)width  - 0.5f) * 2.0f,
-                        ((float)y/(float)height - 0.5f) * 2.0f,
-                        -1.0,
-                        1.0f
-                        );
-        glm::vec4 lRayEnd_NDC(
-                        ((float)x/(float)width  - 0.5f) * 2.0f,
-                        ((float)y/(float)height - 0.5f) * 2.0f,
-                        0.0,
-                        1.0f
-                        );
+        glm::vec4 ray_start_NDC( ((float)x/(float)width  - 0.5f) * 2.0f, ((float)y/(float)height - 0.5f) * 2.0f, -1.0, 1.0f);
+        glm::vec4 ray_end_NDC( ((float)x/(float)width  - 0.5f) * 2.0f, ((float)y/(float)height - 0.5f) * 2.0f, 0.0, 1.0f);
 
         glm::mat4 InverseProjectionMatrix = glm::inverse(perspective);
 
         glm::mat4 InverseViewMatrix = glm::inverse(look);
 
-        glm::vec4 lRayStart_camera = InverseProjectionMatrix * lRayStart_NDC;    lRayStart_camera/=lRayStart_camera.w;
-        glm::vec4 lRayStart_world  = InverseViewMatrix       * lRayStart_camera; lRayStart_world /=lRayStart_world .w;
-        glm::vec4 lRayEnd_camera   = InverseProjectionMatrix * lRayEnd_NDC;      lRayEnd_camera  /=lRayEnd_camera  .w;
-        glm::vec4 lRayEnd_world    = InverseViewMatrix       * lRayEnd_camera;   lRayEnd_world   /=lRayEnd_world   .w;
+        glm::vec4 ray_start_camera = InverseProjectionMatrix * ray_start_NDC; ray_start_camera/=ray_start_camera.w;
+        glm::vec4 ray_start_world = InverseViewMatrix * ray_start_camera; ray_start_world /=ray_start_world.w;
+        glm::vec4 ray_end_camera = InverseProjectionMatrix * ray_end_NDC; ray_end_camera /=ray_end_camera.w;
+        glm::vec4 ray_end_world = InverseViewMatrix * ray_end_camera; ray_end_world /=ray_end_world.w;
 
-        glm::vec3 lRayDir_world(lRayEnd_world - lRayStart_world);
-        lRayDir_world = glm::normalize(lRayDir_world);
-
-        glm::vec3 out_direction = lRayDir_world * 10000.f;
+        const float ray_travel_length = 10000.0;
+        glm::vec3 out_direction(glm::normalize(ray_end_world - ray_start_world) * ray_travel_length);
 
         btCollisionWorld::ClosestRayResultCallback RayCallback(
-                        btVector3(lRayStart_world.x, lRayStart_world.y, lRayStart_world.z), 
+                        btVector3(ray_start_world.x, ray_start_world.y, ray_start_world.z), 
                         btVector3(out_direction.x, out_direction.y, out_direction.z)
                         );
         world->rayTest(
-                        btVector3(lRayStart_world.x, lRayStart_world.y, lRayStart_world.z), 
+                        btVector3(ray_start_world.x, ray_start_world.y, ray_start_world.z), 
                         btVector3(out_direction.x, out_direction.y, out_direction.z), 
                         RayCallback
                       );
@@ -954,7 +896,7 @@ btRigidBody *SimulationContext::RayTrace(int x, int y)
         }
 }
 
-void SimulationObject::draw_buffer()
+void SimulationObject::draw_buffer(btTransform camera)
 {
         if (mesh)
         {
@@ -967,9 +909,9 @@ void SimulationObject::draw_buffer()
                 glUniformMatrix4fv (glGetUniformLocation (shader, "model"), 1, GL_FALSE, mat);
                 glUniformMatrix4fv (glGetUniformLocation (shader, "camera"), 1, GL_FALSE, glm::value_ptr(look));
                 glUniformMatrix4fv (glGetUniformLocation (shader, "perspective"), 1, GL_FALSE, glm::value_ptr(perspective));
-                glUniform3f (glGetUniformLocation (shader, "cameraPosition"), player->transform.getOrigin().x(), 
-                                player->transform.getOrigin().y(), 
-                                player->transform.getOrigin().z()); 
+                glUniform3f (glGetUniformLocation (shader, "cameraPosition"), camera.getOrigin().x(), 
+                                camera.getOrigin().y(), 
+                                camera.getOrigin().z()); 
                 glUniform3f(glGetUniformLocation (shader, "light.position"), 100, 100, 100);
                 glUniform3f(glGetUniformLocation (shader, "light.intensities"), 1, 1, 1);
                 glUniform1i(glGetUniformLocation (shader, "sky"), strcmp(name, "sky"));

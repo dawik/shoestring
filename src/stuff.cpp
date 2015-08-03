@@ -72,6 +72,17 @@ class Material
                 char name[128];
 };
 
+class Camera
+{
+        public:
+                char name[256];
+                float fov;
+                float near;
+                float far;
+                float aspect;
+                glm::mat4 world;
+};
+
 class SimulationObject
 {
         public:
@@ -236,14 +247,17 @@ void Mesh::init_buffer(GLuint vertexApp)
 
 class SimulationContext
 {
+        btDiscreteDynamicsWorld *world;
+        btCollisionDispatcher *dispatcher;
+        btCollisionConfiguration *collisionConfig;
+        btDbvtBroadphase *broadphase;
+        btSequentialImpulseConstraintSolver *solver;
+
+        std::vector<SimulationObject*> objects;
         std::vector<Mesh> meshes;
         std::vector<Material> materials;
+        std::vector<Camera> cameras;
 
-        void CollisionRoutine(void);
-
-        unsigned int loadmaterial(struct aiMaterial *material);
-
-        void Clone(SimulationObject *o, btVector3 position);
 
         void hold_object(int, int);
 
@@ -253,8 +267,6 @@ class SimulationContext
 
         btRigidBody *held_object = NULL;
 
-        btRigidBody *RayTrace(int, int);
-
         int width, height;
         SDL_Surface *screen_surface;
         SDL_Rect **video_modes;
@@ -263,9 +275,15 @@ class SimulationContext
         glm::vec3 forward;
         glm::mat4 camera_rotation;
 
-        void ReadAssets(const struct aiScene*);
+
+        unsigned int loadmaterial(struct aiMaterial *material);
+
 
         char path[256];
+
+        btRigidBody *RayTrace(int, int);
+        void ReadAssets(const struct aiScene*);
+        void CollisionRoutine(void);
 
         public: 
         float pitch, yaw;
@@ -275,32 +293,8 @@ class SimulationContext
                 {
                         throw std::invalid_argument("No command line interface yet\n");
                 } 
+
                 const char *scene_filename = "assets/fractured4.dae", *physics_file = "assets/fractured4.bullet";
-                srand(time(NULL));
-                collisionConfig=new btDefaultCollisionConfiguration();
-                dispatcher=new btCollisionDispatcher(collisionConfig);
-                broadphase=new btDbvtBroadphase();
-                solver=new btSequentialImpulseConstraintSolver();
-                world=new btDiscreteDynamicsWorld(dispatcher,broadphase,solver,collisionConfig);
-                world->setGravity(btVector3(0,0,-9.82));
-
-                SDL_Init( SDL_INIT_VIDEO );
-
-                video_modes=SDL_ListModes(NULL, SDL_FULLSCREEN|SDL_HWSURFACE);
-
-                mode = 1;
-                width = video_modes[mode]->w; 
-                height = video_modes[mode]->h; 
-
-                screen_surface = SDL_SetVideoMode( width, height, 32, SDL_HWSURFACE | SDL_DOUBLEBUF | SDL_OPENGL);
-                printf("Surface: w:%d h:%d bpp:%d\n", screen_surface->w, screen_surface->h, screen_surface->format->BitsPerPixel);
-                SDL_WM_SetCaption( "", 0 );
-                SDL_WM_GrabInput(SDL_GRAB_OFF);
-                SDL_ShowCursor(0);
-                glewExperimental = GL_TRUE;
-                glewInit(); 
-                glEnable(GL_BLEND);
-                glBlendFunc(GL_SRC_COLOR, GL_ZERO);
 
                 for (unsigned long i = 0, sep = 0; i < strlen(scene_filename); i++)
                 {
@@ -313,24 +307,45 @@ class SimulationContext
                         }
                 }
 
+                srand(time(NULL));
+
+                collisionConfig=new btDefaultCollisionConfiguration();
+                dispatcher=new btCollisionDispatcher(collisionConfig);
+                broadphase=new btDbvtBroadphase();
+                solver=new btSequentialImpulseConstraintSolver();
+                world=new btDiscreteDynamicsWorld(dispatcher,broadphase,solver,collisionConfig);
+                world->setGravity(btVector3(0,0,-9.82));
+
+                SDL_Init( SDL_INIT_VIDEO );
+                SDL_WM_SetCaption( "", 0 );
+                SDL_WM_GrabInput(SDL_GRAB_OFF);
+                SDL_ShowCursor(0);
+                video_modes=SDL_ListModes(NULL, SDL_FULLSCREEN|SDL_HWSURFACE);
+                mode = 1;
+                width = video_modes[mode]->w; 
+                height = video_modes[mode]->h; 
+                screen_surface = SDL_SetVideoMode( width, height, 32, SDL_HWSURFACE | SDL_DOUBLEBUF | SDL_OPENGL);
+
+                glewExperimental = GL_TRUE;
+                glewInit(); 
+                shader = compile_shader(read_file("src/standard.vert.glsl"), read_file("src/standard.frag.glsl"));
+                glUseProgram(shader);
+                glEnable(GL_BLEND);
+                glBlendFunc(GL_SRC_COLOR, GL_ZERO);
+
+                gl_error();
+
+
                 Assimp::Importer importer;
                 const struct aiScene *scene = importer.ReadFile(scene_filename,aiProcessPreset_TargetRealtime_Fast);
                 printf("Loading scene from %s\nAssimp:\t%s\n", scene_filename, importer.GetErrorString());
+
                 ReadAssets(scene);
-
-                shader = compile_shader(read_file("src/standard.vert.glsl"), read_file("src/standard.frag.glsl"));
-                glBindFragDataLocation (shader, 0, "outColor");
-                glLinkProgram (shader);
-
-                glUseProgram(shader);
-                gl_error();
-
 
                 for (Mesh &m : meshes)
                 {
                         m.init_buffer(shader);
                 }
-
 
                 class btBulletWorldImporter*		m_fileLoader;
                 m_fileLoader = new btBulletWorldImporter(world);
@@ -356,24 +371,45 @@ class SimulationContext
                                         }
                                 }
                         }
-                        if (player)
+
+                        if (cameras.size() > 0)
                         {
-                                float mat[16];
-                                btTransform t = player->body->getWorldTransform();
-                                t.getOpenGLMatrix(mat);
-                                player->body->setCollisionFlags( btCollisionObject::CF_CHARACTER_OBJECT);
-                                printf("Player pos adding to bullet? %f %f %f\n", t.getOrigin().getX(), t.getOrigin().getY(), t.getOrigin().getZ()); 
-                                world->addRigidBody(player->body);
-                                printf("Adding player\n");
-                        }
-                        printf("CONTEXT INITIALIZED\n");
-                        for (unsigned long i = 0; i < objects.size(); i++)
-                        {
-                                if (strcmp(objects[i]->name, "Cube") == 0)
-                                {
-                                        Clone(objects[i], btVector3(0,0,10));
-                                }
-                        }
+                                Camera cam = cameras.at(0);
+                                pitch = 0;
+                                yaw = 0;
+                                fov = cam.fov;
+                                aspect = cam.aspect;
+                                near = cam.near;
+                                far = 10000.0;
+
+                                btTransform t;  
+                                t.setFromOpenGLMatrix(glm::value_ptr(glm::transpose(cam.world)));
+                                btCapsuleShape *player_shape=new btCapsuleShape(1.0, 2.0);
+                                float player_mass = 5.0;
+                                btVector3 inertia(0,0,0);
+                                player_shape->calculateLocalInertia(player_mass,inertia);
+                                btMotionState* motion=new btDefaultMotionState(t);
+                                btRigidBody::btRigidBodyConstructionInfo info(player_mass,motion,player_shape,inertia);
+                                btRigidBody* player_body=new btRigidBody(info);
+                                player_body->setCollisionFlags( btCollisionObject::CF_CHARACTER_OBJECT);
+                                player_body->setSleepingThresholds(0.0, 0.0);
+                                player_body->setAngularFactor(0.0);
+                                world->addRigidBody(player_body);
+                                player = new SimulationObject("_Sphere", player_body, NULL);
+
+                        } 
+                        /*
+                           if (player)
+                           {
+                           float mat[16];
+                           btTransform t = player->body->getWorldTransform();
+                           t.getOpenGLMatrix(mat);
+                           player->body->setCollisionFlags( btCollisionObject::CF_CHARACTER_OBJECT);
+                           printf("Player pos adding to bullet? %f %f %f\n", t.getOrigin().getX(), t.getOrigin().getY(), t.getOrigin().getZ()); 
+                           world->addRigidBody(player->body);
+                           printf("Adding player\n");
+                           }
+                           */
                 }
         }
         ~SimulationContext()
@@ -385,14 +421,8 @@ class SimulationContext
         void UpdatePosition();
         void PollWindow();
         void Loop();
-        btDynamicsWorld *world;
-        btCollisionDispatcher *dispatcher;
-        btCollisionConfiguration *collisionConfig;
-        btBroadphaseInterface *broadphase;
-        btConstraintSolver *solver;
-        std::vector<SimulationObject*> objects;
         bool SetRigidBodyWithSceneNodeTransformation(btRigidBody *body, const char *name, const struct aiScene *scene);
-        void AddBodyToWorld(const char *name, btRigidBody *body, Mesh *mesh, float transform[16]);
+        void AddSimulationObject(const char *name, btRigidBody *body, Mesh *mesh, float transform[16]);
 };
 
 
@@ -472,20 +502,6 @@ struct aiNode *findnode(struct aiNode *node, const char *name)
         return NULL;
 }
 
-bool contains(const char * subject, const char * pattern)
-{
-        unsigned int slen = strlen(subject), plen = strlen(pattern);
-        for (unsigned int i = 0, j = plen; i < slen; i++)
-        {
-                if (subject[i] == pattern[plen - j])
-                {
-                        if (--j == 0)
-                                return true;
-                }
-        }
-        return false;
-}
-
 void SimulationContext::ReadAssets(const struct aiScene *scene)
 {
         fprintf(stderr, "\nReading scene...\n%d\tmeshes\n%d\tmaterials\n%d\tcameras\n", scene->mNumMeshes, scene->mNumMaterials, scene->mNumCameras);
@@ -538,45 +554,71 @@ void SimulationContext::ReadAssets(const struct aiScene *scene)
                 meshes.push_back(mesh);
         }
 
-        assert(scene->mNumCameras == 1);
         for (unsigned int i = 0; i < scene->mNumCameras; i++)
         {
-                aiCamera *camera = scene->mCameras[i];
-                fov = camera->mHorizontalFOV * 57.2957795;
-                near = camera->mClipPlaneNear;
-                far = camera->mClipPlaneFar;
-                printf("Camera near %f far %f fov %f", near, far, fov);
-                far = 1000;
-                aspect = camera->mAspect;
-                printf("%f %f %f \n", fov, near, far);
+                Camera cam;
+                cam.fov = scene->mCameras[i]->mHorizontalFOV * 57.2957795;
+                cam.near = scene->mCameras[i]->mClipPlaneNear;
+                cam.far = scene->mCameras[i]->mClipPlaneFar;
+                cam.aspect = scene->mCameras[i]->mAspect;
+                strcpy(cam.name, scene->mCameras[i]->mName.C_Str());
                 struct aiNode *node = findnode(scene->mRootNode, scene->mCameras[i]->mName.C_Str());
                 if (node)
                 {
-                        float mat[16];
-                        transposematrix(mat, &node->mTransformation);
-                        {
-                                btTransform t;  
-                                t.setIdentity();
-                                t.setFromOpenGLMatrix(mat);
-                                pitch = 0;
-                                yaw = 0;
-                                float rad = 1.5, mass = 5.0;
-                                btCapsuleShape *player_shape=new btCapsuleShape(rad, 2);
-                                btVector3 inertia(0,0,0);
-                                if(mass!=0.0)
-                                        player_shape->calculateLocalInertia(mass,inertia);
-
-                                btMotionState* motion=new btDefaultMotionState(t);
-                                btRigidBody::btRigidBodyConstructionInfo info(mass,motion,player_shape,inertia);
-                                btRigidBody* body=new btRigidBody(info);
-                                body->forceActivationState(DISABLE_DEACTIVATION);
-                                body->setSleepingThresholds(0.0, 0.0);
-                                body->setAngularFactor(0.0);
-                                world->addRigidBody(body);
-                                player = new SimulationObject("_Sphere", body, NULL);
-                        }
+                        aiMatrix4x4 *m = &node->mTransformation;
+                        cam.world = glm::mat4(glm::vec4(m->a1, m->a2, m->a3, m->a4),
+                                        glm::vec4(m->b1, m->b2, m->b3, m->b4),
+                                        glm::vec4(m->c1, m->c2, m->c3, m->c4),
+                                        glm::vec4(m->d1, m->d2, m->d3, m->d4));
+                        cameras.push_back(cam);
+                } 
+                else 
+                {
+                        fprintf(stderr, "Could not find cam %s in scene graph\n", cam.name);
                 } 
         }
+
+        /*
+           assert(scene->mNumCameras == 1);
+           for (unsigned int i = 0; i < scene->mNumCameras; i++)
+           {
+           aiCamera *camera = scene->mCameras[i];
+           fov = camera->mHorizontalFOV * 57.2957795;
+           near = camera->mClipPlaneNear;
+           far = camera->mClipPlaneFar;
+           printf("Camera near %f far %f fov %f", near, far, fov);
+           far = 1000;
+           aspect = camera->mAspect;
+           printf("%f %f %f \n", fov, near, far);
+           struct aiNode *node = findnode(scene->mRootNode, scene->mCameras[i]->mName.C_Str());
+           if (node)
+           {
+           float mat[16];
+           transposematrix(mat, &node->mTransformation);
+           {
+           btTransform t;  
+           t.setIdentity();
+           t.setFromOpenGLMatrix(mat);
+           pitch = 0;
+           yaw = 0;
+           float rad = 1.5, mass = 5.0;
+           btCapsuleShape *player_shape=new btCapsuleShape(rad, 2);
+           btVector3 inertia(0,0,0);
+           if(mass!=0.0)
+           player_shape->calculateLocalInertia(mass,inertia);
+
+           btMotionState* motion=new btDefaultMotionState(t);
+           btRigidBody::btRigidBodyConstructionInfo info(mass,motion,player_shape,inertia);
+           btRigidBody* body=new btRigidBody(info);
+           body->forceActivationState(DISABLE_DEACTIVATION);
+           body->setSleepingThresholds(0.0, 0.0);
+           body->setAngularFactor(0.0);
+           world->addRigidBody(body);
+           player = new SimulationObject("_Sphere", body, NULL);
+           }
+           } 
+           }
+           */
 };
 
 void SimulationContext::Draw()
@@ -958,64 +1000,15 @@ void SimulationObject::draw_buffer()
         }
 }
 
-void SimulationContext::AddBodyToWorld(const char *name, btRigidBody *body, Mesh *mesh, float transform[16])
+void SimulationContext::AddSimulationObject(const char *name, btRigidBody *body, Mesh *mesh, float transform[16])
 {
-        btScalar mass = 1.0 / body->getInvMass();
-        btTransform t;
-        t.setFromOpenGLMatrix(transform);
 
-        btMotionState* motion=new btDefaultMotionState(t);
-        btVector3 inertia(0,0,0);
-        body->getCollisionShape()->calculateLocalInertia(mass,inertia);
-        btRigidBody::btRigidBodyConstructionInfo info(0,motion,body->getCollisionShape(),inertia);
-
-        {
-                btRigidBody *_body=new btRigidBody(info);
-                world->removeRigidBody(body);
-                _body->setMassProps(mass, inertia);
-                if (contains(name, "cell") == true)
-                {
-                        _body->setSleepingThresholds(10.10,0);
-                        _body->forceActivationState(ISLAND_SLEEPING);
-                }
-                world->addRigidBody(_body);
-                float random_color[4] = { (float) rand() / RAND_MAX, (float) rand() / RAND_MAX, (float) rand() / RAND_MAX, 1.0 };
-                SimulationObject *object = new SimulationObject(name, _body, mesh, random_color);
-                objects.push_back(object);
-        }
-}
-
-void SimulationContext::Clone(SimulationObject *object, btVector3 position)
-{
-        btScalar mass = 1.0 / object->body->getInvMass();
-        btTransform t;
-        t.setIdentity();
-        t.setOrigin(position);
-
-        btMotionState* motion=new btDefaultMotionState(t);
-        btVector3 inertia(0,0,0);
-        object->body->getCollisionShape()->calculateLocalInertia(mass,inertia);
-        btRigidBody::btRigidBodyConstructionInfo info(0,motion,object->body->getCollisionShape(),inertia);
-        {
-                btRigidBody *_body=new btRigidBody(info);
-                _body->setMassProps(mass, inertia);
-                //_body->setSleepingThresholds(10.10,0);
-                if (contains(object->name, "cell") == true)
-                        _body->forceActivationState(ISLAND_SLEEPING);
-                world->addRigidBody(_body);
-                float random_color[4] = { (float) rand() / RAND_MAX, (float) rand() / RAND_MAX, (float) rand() / RAND_MAX, 1.0 };
-                char newname[256];
-                strcpy(newname, object->name);
-                strcat(newname, "_clone");
-                SimulationObject *clone = new SimulationObject(newname, _body, object->mesh, random_color);
-                objects.push_back(clone);
-        }
-        printf("Added clone of %s\n", object->name);
 }
 
 bool SimulationContext::SetRigidBodyWithSceneNodeTransformation(btRigidBody *body, const char *name, const struct aiScene *scene)
 {
         struct aiNode *node = findnode(scene->mRootNode, name);
+        btTransform t;
         float transform[16];
         char _b[256];
         if (!node)
@@ -1035,7 +1028,24 @@ bool SimulationContext::SetRigidBodyWithSceneNodeTransformation(btRigidBody *bod
                         if (strcmp(name, m.name) == 0)
                         {
                                 transposematrix(transform, &node->mTransformation);
-                                AddBodyToWorld(name, body, &m, transform);
+                                t.setFromOpenGLMatrix(transform);
+                                btMotionState* motion=new btDefaultMotionState(t);
+                                btScalar mass = 1.0 / body->getInvMass();
+                                btVector3 inertia(0,0,0);
+                                body->getCollisionShape()->calculateLocalInertia(mass,inertia);
+                                btRigidBody::btRigidBodyConstructionInfo info(0,motion,body->getCollisionShape(),inertia);
+                                btRigidBody *_body=new btRigidBody(info);
+                                world->removeRigidBody(body);
+                                _body->setMassProps(mass, inertia);
+                                {
+                                        _body->setSleepingThresholds(10.10,0);
+                                        _body->forceActivationState(ISLAND_SLEEPING);
+                                }
+                                world->addRigidBody(_body);
+                                float random_color[4] = { (float) rand() / RAND_MAX, (float) rand() / RAND_MAX, (float) rand() / RAND_MAX, 1.0 };
+                                SimulationObject *object = new SimulationObject(name, _body, &m, random_color);
+                                objects.push_back(object);
+                                AddSimulationObject(name, body, &m, transform);
                                 return true;
                         }
                 }

@@ -42,8 +42,6 @@ GLuint shader;
 
 const float PI = 3.14159265359;
 
-glm::mat4 look, perspective;
-
 class Mesh
 {
         public:
@@ -128,7 +126,7 @@ void gl_error()
         if (error != GL_NO_ERROR)
         {
                 printf("\nglError 0x%04X\n", error);
-                exit (1);
+                throw std::runtime_error("GL error");
         }
 }
 
@@ -144,32 +142,26 @@ static void compile_shader_src(GLuint shader, const char* src)
 
         glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
         glGetShaderInfoLog(shader, 4096, &length, log);
-        if(status == GL_FALSE){
-                printf("compile failed %s\n", log);
-                exit(1);
+        if(status == GL_FALSE) {
+                fprintf(stderr, "compile failed %s\n", log);
+                throw std::runtime_error("GLSL Compilation error");
         }
 }
 
 
 GLuint compile_shader(const char* vertex, const char* fragment)
 {
-        // Create the handels
         GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
         GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
         GLuint programShader = glCreateProgram();
 
-        // Attach the shaders to a program handel.
         glAttachShader(programShader, vertexShader);
         glAttachShader(programShader, fragmentShader);
 
-        // Load and compile the Vertex Shader
         compile_shader_src(vertexShader, vertex);
 
-        // Load and compile the Fragment Shader
         compile_shader_src(fragmentShader, fragment);
 
-        // The shader objects are not needed any more,
-        // the programShader is the complete shader to be used.
         glDeleteShader(vertexShader);
         glDeleteShader(fragmentShader);
 
@@ -257,6 +249,8 @@ class SimulationContext
         std::vector<Camera> cameras;
 
         SimulationObject *player;
+        glm::mat4 look, perspective;
+
 
         float near, far, fov, aspect;
 
@@ -588,6 +582,12 @@ void SimulationContext::Draw()
         look =  glm::lookAt(player_pos, player_pos + forward, glm::vec3(0, 0, 1));
         perspective =  glm::perspective(fov, aspect, near, far);
 
+        glUniformMatrix4fv (glGetUniformLocation (shader, "camera"), 1, GL_FALSE, glm::value_ptr(look));
+        glUniformMatrix4fv (glGetUniformLocation (shader, "perspective"), 1, GL_FALSE, glm::value_ptr(perspective));
+        glUniform3f (glGetUniformLocation (shader, "cameraPosition"), t.getOrigin().x(), 
+                        t.getOrigin().y(), 
+                        t.getOrigin().z()); 
+
         //glEnable(GL_CULL_FACE);
         glEnable(GL_DEPTH_TEST);
         glDepthMask(GL_TRUE);
@@ -754,11 +754,13 @@ void SimulationContext::UpdatePosition()
         {
                 if (held_object)
                 {
-                        btTransform tb, tp;
-                        player->body->getMotionState()->getWorldTransform(tp);
-                        held_object->getMotionState()->getWorldTransform(tb);
-                        btVector3 _vb = tp.getOrigin() - tb.getOrigin() + (btVector3(forward.x, forward.y, forward.z) * 4);
-                        held_object->setLinearVelocity(_vb * 5.0);
+                        btTransform object_transform, player_transform;
+                        player->body->getMotionState()->getWorldTransform(player_transform);
+                        held_object->getMotionState()->getWorldTransform(object_transform);
+                        btVector3 summon_to(forward.x, forward.y, forward.z);
+                        summon_to *= 3;
+                        btVector3 _vb = player_transform.getOrigin() - object_transform.getOrigin() + summon_to;
+                        held_object->setLinearVelocity(_vb * 2.5);
                 }
         }
         else 
@@ -808,10 +810,10 @@ void SimulationContext::CollisionRoutine(void)
 
 void SimulationContext::Loop()
 {
+        unsigned int tick;
         while (1)
         {
-                unsigned int start;
-                start = SDL_GetTicks();
+                tick = SDL_GetTicks();
                 world->stepSimulation(1/60.0);
                 CollisionRoutine();
                 PollInput();
@@ -837,9 +839,9 @@ void SimulationContext::Loop()
 
                 SDL_GL_SwapBuffers();
 
-                if(1000/60>=SDL_GetTicks()-start)
+                if(1000/60>=SDL_GetTicks()-tick)
                 {
-                        SDL_Delay(1000.0/60-(SDL_GetTicks()-start));
+                        SDL_Delay(1000.0/60-(SDL_GetTicks()-tick));
                 }
         }
 }
@@ -907,11 +909,6 @@ void SimulationObject::draw_buffer(btTransform camera)
                 glBindVertexArray (mesh->vao);
                 glUniform4f (glGetUniformLocation(shader, "color"), (GLfloat) rgba[0], (GLfloat) rgba[1], (GLfloat) rgba[2], (GLfloat) rgba[3]);
                 glUniformMatrix4fv (glGetUniformLocation (shader, "model"), 1, GL_FALSE, mat);
-                glUniformMatrix4fv (glGetUniformLocation (shader, "camera"), 1, GL_FALSE, glm::value_ptr(look));
-                glUniformMatrix4fv (glGetUniformLocation (shader, "perspective"), 1, GL_FALSE, glm::value_ptr(perspective));
-                glUniform3f (glGetUniformLocation (shader, "cameraPosition"), camera.getOrigin().x(), 
-                                camera.getOrigin().y(), 
-                                camera.getOrigin().z()); 
                 glUniform3f(glGetUniformLocation (shader, "light.position"), 100, 100, 100);
                 glUniform3f(glGetUniformLocation (shader, "light.intensities"), 1, 1, 1);
                 glUniform1i(glGetUniformLocation (shader, "sky"), strcmp(name, "sky"));

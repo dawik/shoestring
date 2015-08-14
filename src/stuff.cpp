@@ -37,9 +37,6 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-
-GLuint shader;
-
 const float PI = 3.14159265359;
 
 class Mesh
@@ -56,6 +53,9 @@ class Mesh
                 ~Mesh() {};
 
                 void init_buffer(GLuint);
+
+
+                GLuint shader;
 
                 char name[128];
                 bool hasTexture;
@@ -198,12 +198,13 @@ char* read_file(const char* filename)
         return buffer;
 }
 
-void Mesh::init_buffer(GLuint vertexApp)
+void Mesh::init_buffer(GLuint activeShader)
 {
+        shader = activeShader;
         size_t stride = hasTexture ? sizeof(float) * 8 : sizeof(float) * 6;
-        GLint vertexAttrib = glGetAttribLocation (vertexApp, "vertex");
-        GLint normalAttrib = glGetAttribLocation (vertexApp, "normal");
-        GLint uvAttrib = glGetAttribLocation (vertexApp, "uv");
+        GLint vertexAttrib = glGetAttribLocation (activeShader, "vertex");
+        GLint normalAttrib = glGetAttribLocation (activeShader, "normal");
+        GLint uvAttrib = glGetAttribLocation (activeShader, "uv");
         glGenBuffers (1, &vbo);
         glBindBuffer (GL_ARRAY_BUFFER, vbo);
         glBufferData (GL_ARRAY_BUFFER, sizeof (float) * vertexdata.size(), &vertexdata[0], GL_STREAM_DRAW);
@@ -251,42 +252,50 @@ class SimulationContext
         SimulationObject *player;
         glm::mat4 look, perspective;
 
+        GLuint shader, grapple_shader;
 
-        float near, far, fov, aspect;
-
-        bool player_grounded = false;
-
-        btRigidBody *held_object = NULL;
+        Mesh *grapple_mesh;
 
         int width;
         int height;
         int mode;
-        int input[7];
+        int input[8];
+        char path[256];
+        float pitch; 
+        float yaw;
+        float near; 
+        float far; 
+        float fov; 
+        float aspect;
+
+        bool player_grounded = false;
+
         SDL_Surface *screen_surface;
         SDL_Rect **video_modes;
+
         glm::vec3 forward;
         glm::mat4 camera_rotation;
 
+        btRigidBody *held_object = NULL;
+        btRigidBody *grapple_target = NULL;
+        btVector3 grapple_position;
 
         unsigned int loadmaterial(struct aiMaterial *material);
 
-
-        char path[256];
-
         btRigidBody *FirstCollisionRayTrace(int, int);
         void ReadAssets(const struct aiScene*);
+        Mesh *LoadMesh(const char *filename, const char *name);
         void CollisionRoutine(void);
 
         public: 
-        float pitch, yaw;
-        SimulationContext(int argc, char **argv)
+        SimulationContext(int argc, char **)
         {
                 if (argc != 1)
                 {
                         throw std::invalid_argument("No command line interface yet\n");
                 } 
 
-                const char *scene_filename = "assets/fractured4.dae", *physics_file = "assets/fractured4.bullet";
+                const char *scene_filename = "assets/sandbox.dae", *physics_file = "assets/sandbox.bullet";
 
                 for (unsigned long i = 0, sep = 0; i < strlen(scene_filename); i++)
                 {
@@ -334,6 +343,17 @@ class SimulationContext
 
                 ReadAssets(scene);
 
+                grapple_mesh = LoadMesh("assets/grapple.dae", "grapple");
+
+                grapple_shader = compile_shader(read_file("src/grapple.vert.glsl"), read_file("src/grapple.frag.glsl"));
+
+                if (grapple_mesh)
+                {
+                        grapple_mesh->init_buffer(grapple_shader);
+                } else {
+                        exit(1);
+                }
+
                 for (Mesh &m : meshes)
                 {
                         m.init_buffer(shader);
@@ -379,7 +399,7 @@ class SimulationContext
 
                                 btCapsuleShape *player_shape=new btCapsuleShape(capsule_radius, capsule_height);
 
-                                float player_mass = 5.0;
+                                float player_mass = 2.5;
                                 btVector3 inertia(0,0,0);
                                 player_shape->calculateLocalInertia(player_mass,inertia);
 
@@ -390,7 +410,7 @@ class SimulationContext
                                 btRigidBody::btRigidBodyConstructionInfo info(player_mass,motion,player_shape,inertia);
                                 btRigidBody* player_body=new btRigidBody(info);
 
-                                //player_body->setCollisionFlags( btCollisionObject::CF_CHARACTER_OBJECT);
+                                player_body->setCollisionFlags( btCollisionObject::CF_CHARACTER_OBJECT);
                                 player_body->setSleepingThresholds(0.0, 0.0);
                                 player_body->setAngularFactor(0.0);
 
@@ -490,6 +510,64 @@ struct aiNode *findnode(struct aiNode *node, const char *name)
         return NULL;
 }
 
+Mesh *SimulationContext::LoadMesh(const char *filename, const char *name)
+{
+        Assimp::Importer importer;
+        const struct aiScene *scene = importer.ReadFile(filename,aiProcessPreset_TargetRealtime_Fast);
+        if (!scene)
+                return NULL;
+        bool foundMesh = false;
+        Mesh *mesh = new Mesh;
+        for (unsigned int i = 0; i < scene->mNumMeshes; i++)
+        {
+                if (strcmp(name, scene->mMeshes[i]->mName.C_Str()) == 0)
+                {
+                        foundMesh = true;
+                        strcpy(mesh->name, scene->mMeshes[i]->mName.C_Str());
+                        mesh->numElements = scene->mMeshes[i]->mNumFaces * 3;
+                        for (unsigned int j = 0; j < scene->mMeshes[i]->mNumVertices; j++)
+                        {
+                                mesh->vertexdata.push_back(scene->mMeshes[i]->mVertices[j].x);
+                                mesh->vertexdata.push_back(scene->mMeshes[i]->mVertices[j].y);
+                                mesh->vertexdata.push_back(scene->mMeshes[i]->mVertices[j].z);
+
+                                if (scene->mMeshes[i]->mNormals)
+                                {
+                                        mesh->vertexdata.push_back(scene->mMeshes[i]->mNormals[j].x);
+                                        mesh->vertexdata.push_back(scene->mMeshes[i]->mNormals[j].y);
+                                        mesh->vertexdata.push_back(scene->mMeshes[i]->mNormals[j].z);
+                                }
+
+                                if (scene->mMeshes[i]->mTextureCoords[0])
+                                {
+                                        mesh->hasTexture = true;
+                                        mesh->vertexdata.push_back(scene->mMeshes[i]->mTextureCoords[0][j].x);
+                                        mesh->vertexdata.push_back(scene->mMeshes[i]->mTextureCoords[0][j].y);
+                                }
+                        }
+
+                        for (unsigned int j = 0; j < scene->mMeshes[i]->mNumFaces; j++)
+                        {
+                                mesh->elements.push_back(scene->mMeshes[i]->mFaces[j].mIndices[0]);
+                                mesh->elements.push_back(scene->mMeshes[i]->mFaces[j].mIndices[1]);
+                                mesh->elements.push_back(scene->mMeshes[i]->mFaces[j].mIndices[2]);
+                        }
+
+                        if (mesh->hasTexture)
+                        {
+                                Material material;
+                                material.index = materials.size();
+                                material.texture = loadmaterial(scene->mMaterials[scene->mMeshes[i]->mMaterialIndex]);
+                                //scene->mMaterials[material.index]->Get(AI_MATKEY_NAME, material.name);
+                                materials.push_back(material);
+                                mesh->texture = materials.at(material.index).texture;
+                        }
+                }
+                return mesh;
+        }
+        return NULL;
+};
+
 void SimulationContext::ReadAssets(const struct aiScene *scene)
 {
         fprintf(stderr, "\nReading scene...\n%d\tmeshes\n%d\tmaterials\n%d\tcameras\n", 
@@ -571,7 +649,7 @@ void SimulationContext::ReadAssets(const struct aiScene *scene)
 void SimulationContext::Draw()
 {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glClearColor(1,0,0,1);
+        glClearColor(0,0,0,1);
         float mat[16];
 
         btTransform t = player->body->getWorldTransform();
@@ -591,17 +669,58 @@ void SimulationContext::Draw()
         //glEnable(GL_CULL_FACE);
         glEnable(GL_DEPTH_TEST);
         glDepthMask(GL_TRUE);
+        glUseProgram(shader);
         for (SimulationObject *object : objects)
         {
                 object->draw_buffer(t);
         }
+        /*
+        {
+                glUseProgram(grapple_shader);
+                btTransform t;
+                t.setIdentity();
+                float mat[16];
+                t.getOpenGLMatrix(mat);
+                glBindVertexArray (grapple_mesh->vao);
+                glUniformMatrix4fv (glGetUniformLocation (grapple_mesh->shader, "perspective"), 1, GL_FALSE, glm::value_ptr(perspective));
+                glUniform3f (glGetUniformLocation (grapple_mesh->shader, "cameraPosition"), t.getOrigin().x(), 
+                                t.getOrigin().y(), 
+                                t.getOrigin().z()); 
+                glUniformMatrix4fv (glGetUniformLocation (grapple_mesh->shader, "model"), 1, GL_FALSE, mat);
+                glUniform4f (glGetUniformLocation(grapple_mesh->shader, "color"), 1,1,1,1);
+                glUniform3f(glGetUniformLocation (grapple_mesh->shader, "light.position"), 100, 100, 100);
+                glUniform3f(glGetUniformLocation (grapple_mesh->shader, "light.intensities"), 1, 1, 1);
+                glUniform1i(glGetUniformLocation (grapple_mesh->shader, "texid"), grapple_mesh->texture);
+                glUniform1f(glGetUniformLocation (grapple_mesh->shader, "light.ambientCoefficient"), 0.5);
+                glUniform1f(glGetUniformLocation (grapple_mesh->shader, "materialShininess"), 0.25);
+                glUniform3f(glGetUniformLocation (grapple_mesh->shader, "materialSpecularColor"), 0.5, 0.5, 0.5);
+
+                if (grapple_mesh->hasTexture) {
+                        glEnable(GL_TEXTURE_2D);
+                        glActiveTexture(GL_TEXTURE0);
+                        glBindTexture(GL_TEXTURE_2D, grapple_mesh->texture);
+                } else 
+                {
+                        glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+                        glDisable(GL_TEXTURE_2D);
+                }
+
+                glDrawElements(
+                                GL_TRIANGLES,
+                                (grapple_mesh->elements.size()),
+                                GL_UNSIGNED_INT,
+                                (void*)0
+                              );
+                glBindVertexArray (0);
+        }
+        */
 
         //glDisable(GL_CULL_FACE);
         glDisable(GL_TEXTURE_2D);
         glDisable(GL_DEPTH_TEST);
 }
 
-enum {LEFT = 0, RIGHT = 1, FORWARD = 2, BACK = 3, LEFT_CLICK = 4, RIGHT_CLICK = 5, JUMP = 6};
+enum {LEFT = 0, RIGHT = 1, FORWARD = 2, BACK = 3, LEFT_CLICK = 4, RIGHT_CLICK = 5, MIDDLE_CLICK = 6, JUMP = 7};
 
 void SimulationContext::PollInput()
 {
@@ -625,23 +744,26 @@ void SimulationContext::PollInput()
                                                 }
                                         case SDL_BUTTON_MIDDLE:
                                                 {
-                                                        btTransform t;
-                                                        player->body->getMotionState()->getWorldTransform(t);
-                                                        btVector3 forward_bt = btVector3(forward.x,forward.y,forward.z);
-                                                        t.setOrigin(t.getOrigin() + (forward_bt * 2.0));
-                                                        float rad = 0.25, mass = 2.5;
-                                                        btSphereShape* sphere=new btSphereShape(rad);
-                                                        btVector3 inertia(0,0,0);
-                                                        if(mass!=0.0)
-                                                                sphere->calculateLocalInertia(mass,inertia);
-                                                        btMotionState* motion=new btDefaultMotionState(t);
-                                                        btRigidBody::btRigidBodyConstructionInfo info(mass,motion,sphere,inertia);
-                                                        btRigidBody* body=new btRigidBody(info);
-                                                        body->setLinearVelocity(forward_bt *= 30);
-                                                        world->addRigidBody(body);
-                                                        float sphere_color[4] = { 0, 1.0, 0, 1};
-                                                        SimulationObject *object = new SimulationObject("_Sphere", body, NULL, sphere_color);
-                                                        objects.push_back(object);
+                                                        input[MIDDLE_CLICK] = 1;
+                                                        /*
+                                                           btTransform t;
+                                                           player->body->getMotionState()->getWorldTransform(t);
+                                                           btVector3 forward_bt = btVector3(forward.x,forward.y,forward.z);
+                                                           t.setOrigin(t.getOrigin() + (forward_bt * 2.0));
+                                                           float rad = 0.25, mass = 2.5;
+                                                           btSphereShape* sphere=new btSphereShape(rad);
+                                                           btVector3 inertia(0,0,0);
+                                                           if(mass!=0.0)
+                                                           sphere->calculateLocalInertia(mass,inertia);
+                                                           btMotionState* motion=new btDefaultMotionState(t);
+                                                           btRigidBody::btRigidBodyConstructionInfo info(mass,motion,sphere,inertia);
+                                                           btRigidBody* body=new btRigidBody(info);
+                                                           body->setLinearVelocity(forward_bt *= 30);
+                                                           world->addRigidBody(body);
+                                                           float sphere_color[4] = { 0, 1.0, 0, 1};
+                                                           SimulationObject *object = new SimulationObject("_Sphere", body, NULL, sphere_color);
+                                                           objects.push_back(object);
+                                                           */
                                                         break;
                                                 }
 
@@ -669,18 +791,17 @@ void SimulationContext::PollInput()
                                         if (yaw > 2 * PI) 
                                                 yaw = yaw - (2 * PI);
                                         else if (yaw < 0)
-                                                yaw = 2 * PI + yaw;
-                                        if (event.motion.x < width && event.motion.y < height)
-                                        {
-                                                SDL_WarpMouse(width/2, height/2);
-                                                SDL_WarpMouse(width/2, height/2);
-                                        }
-                                        break;
+                                                yaw = 2 * PI + yaw; SDL_WarpMouse(width/2, height/2); SDL_WarpMouse(width/2, height/2); break;
                                 }
                         case SDL_MOUSEBUTTONUP: 
                                 if (event.button.button == SDL_BUTTON_LEFT)
                                 {
                                         input[LEFT_CLICK] = 0;
+                                        break;
+                                }
+                                if (event.button.button == SDL_BUTTON_MIDDLE)
+                                {
+                                        input[MIDDLE_CLICK] = 0;
                                         break;
                                 }
                         case SDL_KEYDOWN:
@@ -743,14 +864,16 @@ void SimulationContext::UpdatePosition()
         {
                 btTransform t;
                 player->body->getMotionState()->getWorldTransform(t);
-                player->body->applyForce(btVector3(velocity.x() * -25, velocity.y() * -25, 0),t.getOrigin());
+                if (player_grounded)
+                        player->body->applyForce(btVector3(velocity.x() * -25, velocity.y() * -25, 0),t.getOrigin());
         }
         else
         {
                 const btVector3 normalized = _v.normalized();
-                velocity = btVector3(normalized.x() * walkspeed, normalized.y() * walkspeed, velocity.z());
+                if (player_grounded)
+                        velocity = btVector3(normalized.x() * walkspeed, normalized.y() * walkspeed, velocity.z());
         }
-        if (input[LEFT_CLICK])
+        if (input[MIDDLE_CLICK])
         {
                 if (held_object)
                 {
@@ -765,9 +888,32 @@ void SimulationContext::UpdatePosition()
         }
         else 
         {
-                held_object = NULL;
+                if (held_object)
+                {
+                        btVector3 shoot_to(forward.x, forward.y, forward.z);
+                        held_object->setLinearVelocity(shoot_to * 100.0);
+                        held_object = NULL;
+                }
         }
+        if (input[LEFT_CLICK])
+        {
+                if (grapple_target)
+                {
+                        btTransform object_transform, player_transform;
+                        player->body->getMotionState()->getWorldTransform(player_transform);
+                        grapple_target->getMotionState()->getWorldTransform(object_transform);
+                        btVector3 _vb = (grapple_position - player_transform.getOrigin());
+                        _vb = _vb.normalize();
+                        _vb *= 40;
+                        player->body->setLinearVelocity(_vb);
+                        return;
+                }
+                else
+                        return;
 
+        } 
+        else 
+                grapple_target = NULL;
         player->body->setLinearVelocity(velocity);
 }
 
@@ -823,9 +969,13 @@ void SimulationContext::Loop()
                 if (collisionBody && !held_object)
                 {
                         for (SimulationObject *o : objects)
-                                if (collisionBody == o->body && collisionBody->getInvMass() != 0)
-                                        held_object = collisionBody;
-
+                                if (collisionBody == o->body)
+                                {
+                                        if (input[MIDDLE_CLICK] && collisionBody->getInvMass() != 0)
+                                                held_object = collisionBody;
+                                        if (input[LEFT_CLICK])
+                                                grapple_target = collisionBody;
+                                }
                 }
                 if (width != video_modes[mode]->w && height != video_modes[mode]->h)
                 {
@@ -893,9 +1043,17 @@ btRigidBody *SimulationContext::FirstCollisionRayTrace(int x, int y)
 
         if(RayCallback.hasHit()) 
         {
+                //printf("Myeuw %f %f %f\n", RayCallback.m_hitPointWorld.x(), RayCallback.m_hitPointWorld.y(), RayCallback.m_hitPointWorld.z()); 
+                if (!grapple_target)
+                {
+                        grapple_position.setX(RayCallback.m_hitPointWorld.x());
+                        grapple_position.setY(RayCallback.m_hitPointWorld.y());
+                        grapple_position.setZ(RayCallback.m_hitPointWorld.z());
+                }
                 btRigidBody *obj = (btRigidBody*) RayCallback.m_collisionObject;
                 return obj;
         }
+        return NULL;
 }
 
 void SimulationObject::draw_buffer(btTransform camera)
@@ -907,15 +1065,15 @@ void SimulationObject::draw_buffer(btTransform camera)
                 body->getMotionState()->getWorldTransform(t);
                 t.getOpenGLMatrix(mat);
                 glBindVertexArray (mesh->vao);
-                glUniform4f (glGetUniformLocation(shader, "color"), (GLfloat) rgba[0], (GLfloat) rgba[1], (GLfloat) rgba[2], (GLfloat) rgba[3]);
-                glUniformMatrix4fv (glGetUniformLocation (shader, "model"), 1, GL_FALSE, mat);
-                glUniform3f(glGetUniformLocation (shader, "light.position"), 100, 100, 100);
-                glUniform3f(glGetUniformLocation (shader, "light.intensities"), 1, 1, 1);
-                glUniform1i(glGetUniformLocation (shader, "sky"), strcmp(name, "sky"));
-                glUniform1i(glGetUniformLocation (shader, "texid"), mesh->texture);
-                glUniform1f(glGetUniformLocation (shader, "light.ambientCoefficient"), 0.5);
-                glUniform1f(glGetUniformLocation (shader, "materialShininess"), 0.25);
-                glUniform3f(glGetUniformLocation (shader, "materialSpecularColor"), 0.5, 0.5, 0.5);
+                glUniform4f (glGetUniformLocation(mesh->shader, "color"), (GLfloat) rgba[0], (GLfloat) rgba[1], (GLfloat) rgba[2], (GLfloat) rgba[3]);
+                glUniformMatrix4fv (glGetUniformLocation (mesh->shader, "model"), 1, GL_FALSE, mat);
+                glUniform3f(glGetUniformLocation (mesh->shader, "light.position"), 100, 100, 100);
+                glUniform3f(glGetUniformLocation (mesh->shader, "light.intensities"), 1, 1, 1);
+                glUniform1i(glGetUniformLocation (mesh->shader, "sky"), strcmp(name, "sky"));
+                glUniform1i(glGetUniformLocation (mesh->shader, "texid"), mesh->texture);
+                glUniform1f(glGetUniformLocation (mesh->shader, "light.ambientCoefficient"), 0.5);
+                glUniform1f(glGetUniformLocation (mesh->shader, "materialShininess"), 0.25);
+                glUniform3f(glGetUniformLocation (mesh->shader, "materialSpecularColor"), 0.5, 0.5, 0.5);
 
                 if (mesh->hasTexture) {
                         glEnable(GL_TEXTURE_2D);
@@ -943,6 +1101,7 @@ void SimulationContext::AddSimulationObject(const char *name, btRigidBody *body,
 {
 
 }
+
 
 bool SimulationContext::SetRigidBodyWithSceneNodeTransformation(btRigidBody *body, const char *name, const struct aiScene *scene)
 {
@@ -973,16 +1132,11 @@ bool SimulationContext::SetRigidBodyWithSceneNodeTransformation(btRigidBody *bod
                                 btVector3 inertia(0,0,0);
                                 body->getCollisionShape()->calculateLocalInertia(mass,inertia);
                                 btRigidBody::btRigidBodyConstructionInfo info(0,motion,body->getCollisionShape(),inertia);
-                                btRigidBody *_body=new btRigidBody(info);
-                                world->removeRigidBody(body);
-                                _body->setMassProps(mass, inertia);
-                                {
-                                        _body->setSleepingThresholds(10.10,0);
-                                        _body->forceActivationState(ISLAND_SLEEPING);
-                                }
-                                world->addRigidBody(_body);
+                                body->setMassProps(mass, inertia);
+                                body->setMotionState(motion);
+                                body->setActivationState(ISLAND_SLEEPING);
                                 float random_color[4] = { (float) rand() / RAND_MAX, (float) rand() / RAND_MAX, (float) rand() / RAND_MAX, 1.0 };
-                                SimulationObject *object = new SimulationObject(name, _body, &m, random_color);
+                                SimulationObject *object = new SimulationObject(name, body, &m, random_color);
                                 objects.push_back(object);
                                 AddSimulationObject(name, body, &m, transform);
                                 return true;

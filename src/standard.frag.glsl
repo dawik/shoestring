@@ -39,6 +39,7 @@ void main()
 
     //diffuse
     float diffuseCoefficient = max(0.0, dot(normal, surfaceToLight));
+    //diffuseCoefficient += max(0.0, dot(normal, surfaceToCamera));
     vec3 diffuse = diffuseCoefficient * surfaceColor.rgb * light.intensities;
     
     //specular

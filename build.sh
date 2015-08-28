@@ -2,8 +2,15 @@
 
 git submodule update --recursive
 cd bullet3/build3
-./premake4_linux64
+./premake4_linux64 gmake
 cd ..
-cmake .
 sed -i 's/\s\+\(printf("unknown chunk\\n")\);/\/\/\1/' */*/*/*.cpp
+cd build3/gmake
+make
+cd ../../bin
+rename _gmake_x64_release '' *.a
+echo "Bullet built"
+
+cd ../assimp
+cmake -G 'Unix Makefiles'
 make

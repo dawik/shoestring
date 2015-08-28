@@ -14,7 +14,7 @@
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
-#include <bullet/btBulletDynamicsCommon.h>      //you may need to change this
+#include "btBulletDynamicsCommon.h"
 #include "LinearMath/btSerializer.h"
 #include "LinearMath/btIDebugDraw.h"
 #include "btBulletFile.h"

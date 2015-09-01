@@ -1,7 +1,7 @@
 #define NO_SDL_GLEXT
-#include <SDL/SDL.h>
+#include <SDL2/SDL.h>
 #include <GL/glew.h>
-#include <SDL/SDL_opengl.h>
+#include <SDL2/SDL_opengl.h>
 #include <GL/gl.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -259,6 +259,7 @@ class SimulationContext
         int width;
         int height;
         int mode;
+        int new_resolution;
         int input[8];
         char path[256];
         float pitch; 
@@ -270,8 +271,8 @@ class SimulationContext
 
         bool player_grounded = false;
 
-        SDL_Surface *screen_surface;
-        SDL_Rect **video_modes;
+        SDL_Window *window;
+        SDL_DisplayMode video_mode = { SDL_PIXELFORMAT_UNKNOWN, 0, 0, 0, 0 };
 
         glm::vec3 forward;
         glm::mat4 camera_rotation;
@@ -318,15 +319,21 @@ class SimulationContext
                 world->setGravity(btVector3(0,0,-9.82));
 
                 SDL_Init( SDL_INIT_VIDEO );
-                SDL_WM_SetCaption( "", 0 );
-                SDL_WM_GrabInput(SDL_GRAB_OFF);
+                //SDL_WM_GrabInput(SDL_GRAB_OFF);
+                SDL_SetRelativeMouseMode(SDL_TRUE);
                 SDL_ShowCursor(0);
-                video_modes=SDL_ListModes(NULL, SDL_FULLSCREEN|SDL_HWSURFACE);
                 mode = 1;
-                width = video_modes[mode]->w; 
-                height = video_modes[mode]->h; 
-                screen_surface = SDL_SetVideoMode( width, height, 32, SDL_HWSURFACE | SDL_DOUBLEBUF | SDL_OPENGL);
+                if (SDL_GetDisplayMode(0, 0, &video_mode) != 0) {
+                        SDL_Log("SDL_GetDisplayMode failed: %s", SDL_GetError());
+                        exit(1);       
+                }
+                       printf("Numdisplaymodes %d\n", SDL_GetNumDisplayModes(1));
+                width = video_mode.w;
+                height = video_mode.h;
+                //screen_surface = SDL_SetVideoMode( width, height, 32, SDL_HWSURFACE | SDL_DOUBLEBUF | SDL_OPENGL);
 
+                window = SDL_CreateWindow("Shoestring Game Engine", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width, height, SDL_WINDOW_OPENGL);
+                SDL_GL_CreateContext(window);
                 glewExperimental = GL_TRUE;
                 glewInit(); 
                 shader = compile_shader(read_file("src/standard.vert.glsl"), read_file("src/standard.frag.glsl"));
@@ -657,7 +664,7 @@ void SimulationContext::Draw()
 
         glm::vec3 player_pos = glm::vec3(t.getOrigin().getX(), t.getOrigin().getY(), t.getOrigin().getZ());
 
-        look =  glm::lookAt(player_pos, player_pos + forward, glm::vec3(0, 0, 1));
+        look =  glm::lookAt(player_pos, player_pos + forward, glm::vec3(0, 0, -1));
         perspective =  glm::perspective(fov, aspect, near, far);
 
         glUniformMatrix4fv (glGetUniformLocation (shader, "camera"), 1, GL_FALSE, glm::value_ptr(look));
@@ -674,46 +681,6 @@ void SimulationContext::Draw()
         {
                 object->draw_buffer(t);
         }
-        /*
-        {
-                glUseProgram(grapple_shader);
-                btTransform t;
-                t.setIdentity();
-                float mat[16];
-                t.getOpenGLMatrix(mat);
-                glBindVertexArray (grapple_mesh->vao);
-                glUniformMatrix4fv (glGetUniformLocation (grapple_mesh->shader, "perspective"), 1, GL_FALSE, glm::value_ptr(perspective));
-                glUniform3f (glGetUniformLocation (grapple_mesh->shader, "cameraPosition"), t.getOrigin().x(), 
-                                t.getOrigin().y(), 
-                                t.getOrigin().z()); 
-                glUniformMatrix4fv (glGetUniformLocation (grapple_mesh->shader, "model"), 1, GL_FALSE, mat);
-                glUniform4f (glGetUniformLocation(grapple_mesh->shader, "color"), 1,1,1,1);
-                glUniform3f(glGetUniformLocation (grapple_mesh->shader, "light.position"), 100, 100, 100);
-                glUniform3f(glGetUniformLocation (grapple_mesh->shader, "light.intensities"), 1, 1, 1);
-                glUniform1i(glGetUniformLocation (grapple_mesh->shader, "texid"), grapple_mesh->texture);
-                glUniform1f(glGetUniformLocation (grapple_mesh->shader, "light.ambientCoefficient"), 0.5);
-                glUniform1f(glGetUniformLocation (grapple_mesh->shader, "materialShininess"), 0.25);
-                glUniform3f(glGetUniformLocation (grapple_mesh->shader, "materialSpecularColor"), 0.5, 0.5, 0.5);
-
-                if (grapple_mesh->hasTexture) {
-                        glEnable(GL_TEXTURE_2D);
-                        glActiveTexture(GL_TEXTURE0);
-                        glBindTexture(GL_TEXTURE_2D, grapple_mesh->texture);
-                } else 
-                {
-                        glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-                        glDisable(GL_TEXTURE_2D);
-                }
-
-                glDrawElements(
-                                GL_TRIANGLES,
-                                (grapple_mesh->elements.size()),
-                                GL_UNSIGNED_INT,
-                                (void*)0
-                              );
-                glBindVertexArray (0);
-        }
-        */
 
         //glDisable(GL_CULL_FACE);
         glDisable(GL_TEXTURE_2D);
@@ -727,16 +694,16 @@ void SimulationContext::PollInput()
         SDL_Event event;
         while (SDL_PollEvent (&event))
         {
-                Uint8 *keystate = SDL_GetKeyState(NULL);
+                const Uint8 *keystate = SDL_GetKeyboardState(NULL);
                 switch (event.type) 
                 {
                         case SDL_MOUSEBUTTONDOWN:
                                 switch (event.button.button)
                                 {
-                                        case SDL_BUTTON_WHEELUP:
-                                                break;
-                                        case SDL_BUTTON_WHEELDOWN:
-                                                break;
+                                        //case SDL_BUTTON_WHEELUP:
+                                                //break;
+                                        //case SDL_BUTTON_WHEELDOWN:
+                                                //break;
                                         case SDL_BUTTON_LEFT:
                                                 {
                                                         input[LEFT_CLICK] = 1;
@@ -781,17 +748,18 @@ void SimulationContext::PollInput()
 
                         case SDL_MOUSEMOTION:
                                 {
-                                        float sensitivity = 0.0001;
-                                        pitch -= sensitivity * (width/2.0 - event.motion.x);
-                                        yaw += sensitivity * (height/2.0 - event.motion.y);
+                                        float sensitivity = 0.001;
+                                        pitch += sensitivity * event.motion.xrel;
+                                        yaw += sensitivity * event.motion.yrel;
                                         if (pitch > 2 * PI) 
                                                 pitch = pitch - (2 * PI);
                                         else if (pitch < 0)
                                                 pitch = 2 * PI + pitch;
                                         if (yaw > 2 * PI) 
                                                 yaw = yaw - (2 * PI);
-                                        else if (yaw < 0)
-                                                yaw = 2 * PI + yaw; SDL_WarpMouse(width/2, height/2); SDL_WarpMouse(width/2, height/2); break;
+                                        else if (yaw < 0) 
+                                                yaw = 2 * PI + yaw; 
+                                        break;
                                 }
                         case SDL_MOUSEBUTTONUP: 
                                 if (event.button.button == SDL_BUTTON_LEFT)
@@ -808,27 +776,31 @@ void SimulationContext::PollInput()
                                 {
                                         if (keystate[SDLK_PLUS])
                                         {
-                                                if (!mode)
-                                                        while (video_modes[mode+1])
-                                                                mode++;
+                                                if (mode < SDL_GetNumDisplayModes(0))
+                                                        mode++;
                                                 else
-                                                        mode--;
+                                                    mode = 0;
+                                                new_resolution = 1;
+                                                break;
                                         }
                                         if (keystate[SDLK_MINUS])
-                                                mode = video_modes[mode+1] ? mode + 1 : 0;
+                                        {
+                                                if (mode)
+                                                        mode--;
+                                                else
+                                                        mode = SDL_GetNumDisplayModes(0);
+                                                new_resolution = 1;
+                                                break;
+                                        }
                                 }
                         case SDL_KEYUP:
                                 {
-                                        input[FORWARD] = keystate[SDLK_w] ? 1 : 0;
-                                        input[BACK] = keystate[SDLK_s] ? 1 : 0;
-                                        input[RIGHT] = keystate[SDLK_d] ? 1 : 0;
-                                        input[LEFT] = keystate[SDLK_a] ? 1 : 0;
-                                        if (keystate[SDLK_ESCAPE] || keystate[SDLK_q])
+                                        input[FORWARD] = keystate[SDL_SCANCODE_W] ? 1 : 0;
+                                        input[BACK] = keystate[SDL_SCANCODE_S] ? 1 : 0;
+                                        input[RIGHT] = keystate[SDL_SCANCODE_D] ? 1 : 0;
+                                        input[LEFT] = keystate[SDL_SCANCODE_A] ? 1 : 0;
+                                        if (keystate[SDL_SCANCODE_ESCAPE] || keystate[SDL_SCANCODE_Q])
                                                 throw std::runtime_error("Simulation ended");
-                                        break;
-                                }
-                        case SDL_VIDEORESIZE:
-                                {
                                         break;
                                 }
                         case SDL_QUIT:
@@ -977,17 +949,24 @@ void SimulationContext::Loop()
                                                 grapple_target = collisionBody;
                                 }
                 }
-                if (width != video_modes[mode]->w && height != video_modes[mode]->h)
+                if (new_resolution)
                 {
-                        SDL_FreeSurface(screen_surface);
-                        width = video_modes[mode]->w;
-                        height = video_modes[mode]->h;
-                        screen_surface = SDL_SetVideoMode( width, height, 32, SDL_HWSURFACE | SDL_DOUBLEBUF | SDL_OPENGL | SDL_VIDEORESIZE);
+                        /*SDL_FreeSurface(screen_surface);
+                          width = video_modes[mode]->w;
+                          height = video_modes[mode]->h;
+                          screen_surface = SDL_SetVideoMode( width, height, 32, SDL_HWSURFACE | SDL_DOUBLEBUF | SDL_OPENGL | SDL_VIDEORESIZE);
+                          */
+                        SDL_GetDisplayMode(0, mode, &video_mode);
+                        width = video_mode.w;
+                        height = video_mode.h;
+                        SDL_SetWindowDisplayMode(window, (const SDL_DisplayMode*) &video_mode);
+                        SDL_SetWindowSize(window, width, height);
                         glViewport(0, 0, width, height);
-                        printf("Changed resolution to %d*%d\n", width, height);
+                        printf("Changed resolution to mode %d res %d*%d\n", mode, width, height);
+                        new_resolution = 0;
                 }
 
-                SDL_GL_SwapBuffers();
+                SDL_GL_SwapWindow(window);
 
                 if(1000/60>=SDL_GetTicks()-tick)
                 {
@@ -1134,7 +1113,7 @@ bool SimulationContext::SetRigidBodyWithSceneNodeTransformation(btRigidBody *bod
                                 btRigidBody::btRigidBodyConstructionInfo info(0,motion,body->getCollisionShape(),inertia);
                                 body->setMassProps(mass, inertia);
                                 body->setMotionState(motion);
-                                body->setActivationState(ISLAND_SLEEPING);
+                                body->setActivationState(WANTS_DEACTIVATION);
                                 float random_color[4] = { (float) rand() / RAND_MAX, (float) rand() / RAND_MAX, (float) rand() / RAND_MAX, 1.0 };
                                 SimulationObject *object = new SimulationObject(name, body, &m, random_color);
                                 objects.push_back(object);

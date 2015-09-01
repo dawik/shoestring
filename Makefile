@@ -1,7 +1,7 @@
 PROGRAM=ss-engine
 CC=clang
 FLAGS=-g -Wall -std=c++11 
-LINKED_LIBRARIES=-lstdc++ -lm -lGL -lGLEW -lGL -lSDL -lfreetype -lGLU -lBulletDynamics -lBulletCollision -lLinearMath 
+LINKED_LIBRARIES=-lstdc++ -lm -lGL -lGLEW -lGL -lSDL2 -lfreetype -lGLU -lBulletDynamics -lBulletCollision -lLinearMath 
 SOURCE=src/stuff.cpp -I src/
 ASSIMP=-I./assimp/include ./assimp/lib/libassimp.so
 BULLET_OBJ_DIR=./bullet3/build3/gmake/obj/x64/Release

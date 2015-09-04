@@ -28,9 +28,10 @@ out vec4 finalColor;
 
 void main() 
 {
-    vec3 normal = normalize(transpose(inverse(mat3(model))) * normalFrag);
+    vec3 normal = normalize(transpose(inverse(mat3(model))) * normalFrag); 
+    //normal = normalFrag;
     vec3 surfacePos = vec3(model * vec4(vertexFrag, 1));
-    vec4 surfaceColor = texture(tex, uvFrag);
+    vec4 surfaceColor = texid > 0 ? texture(tex, uvFrag) : color;
     vec3 surfaceToLight = normalize(light.position - surfacePos);
     vec3 surfaceToCamera = normalize(cameraPosition - surfacePos);
     
@@ -39,13 +40,12 @@ void main()
 
     //diffuse
     float diffuseCoefficient = max(0.0, dot(normal, surfaceToLight));
-    //diffuseCoefficient += max(0.0, dot(normal, surfaceToCamera));
     vec3 diffuse = diffuseCoefficient * surfaceColor.rgb * light.intensities;
     
     //specular
-    float specularCoefficient = 0.0;
+    float specularCoefficient = 0.3;
     if(diffuseCoefficient > 0.0)
-        specularCoefficient = pow(max(0.0, dot(surfaceToCamera, reflect(-surfaceToLight, normal))), materialShininess);
+    specularCoefficient = pow(max(0.0, dot(surfaceToCamera, reflect(-surfaceToLight, normal))), materialShininess);
     vec3 specular = specularCoefficient * materialSpecularColor * light.intensities;
     
     //attenuation
@@ -53,7 +53,8 @@ void main()
     float attenuation = 1.0 / (1.0 + light.attenuation * pow(distanceToLight, 2));
 
     //linear color (color before gamma correction)
-    vec3 linearColor = ambient + attenuation*(diffuse + specular);
+    //vec3 linearColor = ambient + attenuation*(diffuse + specular); // Specular broken
+    vec3 linearColor = ambient + attenuation*(diffuse);
     
     //final color (after gamma correction)
     vec3 gamma = vec3(1.0/2.2);
@@ -63,12 +64,8 @@ void main()
     const float crossRadius = 0.003;
     float d = sqrt(pow(tv.x/tv.z, 2) + pow(tv.y/tv.z, 2));
     if (d < crossRadius)
-    {
             finalColor = vec4(0.75,0,0,0.1);
-    } else if (texid > 0)
-    {
-            finalColor = sky == 0 ? texture(tex, uvFrag) : vec4(pow(linearColor, gamma), surfaceColor.a);
-    } else {
-            finalColor = vec4(pow(color.xyz * light.ambientCoefficient * diffuseCoefficient, gamma), 1);
-    }
+    else
+            finalColor = vec4(pow(linearColor, gamma), surfaceColor.a);
+    //finalColor = vec4(finalColor.xyz*0.01 + normalFrag, 1.0);
 }

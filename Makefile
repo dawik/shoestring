@@ -1,6 +1,6 @@
 PROGRAM=ss-engine
 CC=clang
-FLAGS=-g -Wall -std=c++11 
+FLAGS=-g -Wall -Wno-unused-function -std=c++11 
 LINKED_LIBRARIES=-lstdc++ -lm -lGL -lGLEW -lGL -lSDL2 -lfreetype -lGLU -lBulletDynamics -lBulletCollision -lLinearMath 
 SOURCE=src/stuff.cpp -I src/
 ASSIMP=-I./assimp/include ./assimp/lib/libassimp.so

@@ -423,8 +423,8 @@ class Context
                         if (cameras.size() > 0)
                         {
                                 Camera cam = cameras.at(0);
-                                pitch = 0;
-                                yaw = 0;
+                                pitch = twopi;
+                                yaw = twopi;
                                 fov = cam.fov;
                                 aspect = cam.aspect;
                                 near = 0.01;
@@ -707,7 +707,7 @@ void Context::Draw()
         btVector3 origin = t.getOrigin();
         glm::vec3 eye = glm::vec3(origin.x(), origin.y(), origin.z());
 
-        look =  glm::lookAt(eye, eye + forward, up);
+        look =  glm::lookAt(eye, eye + (forward * float(5)), up);
         perspective =  glm::perspective(fov, aspect, near, far);
 
         glUniformMatrix4fv (glGetUniformLocation (shader, "camera"), 1, GL_FALSE, glm::value_ptr(look));
@@ -790,17 +790,22 @@ void Context::PollInput()
 
                         case SDL_MOUSEMOTION:
                                 {
+                                        printf("pitch %f yaw %f\n", pitch, yaw);
                                         float sensitivity = 0.001;
                                         pitch += sensitivity * event.motion.xrel;
-                                        yaw += sensitivity * event.motion.yrel;
-                                        if (pitch > twopi) 
-                                                pitch = pitch - (twopi);
+                                        float motion = sensitivity * event.motion.yrel;
+                                        yaw += motion;
+                                        if (yaw < 4.75 || yaw > 7.8)
+                                                yaw-=motion;
+                                        const float yaw_stop = 0.01;
+                                        if (pitch > 2 * twopi) 
+                                                pitch = twopi;
                                         else if (pitch < 0)
-                                                pitch = twopi + pitch;
-                                        if (yaw > twopi) 
-                                                yaw = yaw - (twopi);
+                                                pitch = twopi;
+                                        if (yaw > 2 * twopi) 
+                                                yaw = twopi;
                                         else if (yaw < 0) 
-                                                yaw = twopi + yaw; 
+                                                yaw = twopi;
                                         break;
                                 }
                         case SDL_KEYDOWN:
@@ -884,14 +889,14 @@ void Context::UpdatePosition()
         {
                 btTransform t;
                 player->body->getMotionState()->getWorldTransform(t);
-//                if (player_grounded)
-                        player->body->applyForce(btVector3(velocity.x() * -25, velocity.y() * -25, 0),t.getOrigin());
+                //                if (player_grounded)
+                player->body->applyForce(btVector3(velocity.x() * -25, velocity.y() * -25, 0),t.getOrigin());
         }
         else
         {
                 const btVector3 normalized = _v.normalized();
                 //if (player_grounded)
-                        velocity = btVector3(normalized.x() * walkspeed, normalized.y() * walkspeed, velocity.z());
+                velocity = btVector3(normalized.x() * walkspeed, normalized.y() * walkspeed, velocity.z());
         }
         if (input[LEFT_CLICK])
         {
@@ -952,7 +957,7 @@ void Context::CollisionRoutine(void)
                         }
 
                         //if (fabs(velocity.z()) > 0.5)
-                                //player_grounded = false;
+                        //player_grounded = false;
                         //player_grounded = true;
                 }
 

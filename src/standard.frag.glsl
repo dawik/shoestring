@@ -77,7 +77,7 @@ void main()
             finalColor = vec4(pow(linearColor, gamma), surfaceColor.a);
             if (isHighlighted > 0)
             {
-                    finalColor *= color;
+                    finalColor = color;
             }
     }
 

@@ -45,7 +45,7 @@ int o = 0;
 struct draw_opts
 {
         bool textured = true;
-        bool highlighted = false;
+        bool selected = false;
         btTransform camera;
 };
 
@@ -109,7 +109,7 @@ class Object
 
                 btCollisionShape *shape;
 
-                std::vector<btRigidBody*> instances;
+                std::vector<btRigidBody*> body_instances;
 
                 Object(const char *_name, btRigidBody* _body, Mesh* _mesh)
                 {
@@ -147,7 +147,7 @@ class Object
                         body->setMotionState(motion);
                         //body->setActivationState(WANTS_DEACTIVATION);
 
-                        instances.push_back(body);
+                        body_instances.push_back(body);
                         world->addRigidBody(body);
                 }
 
@@ -284,10 +284,7 @@ struct Instance {
                 }
                 float transform[16];
                 char name[256];
-                bool hasMesh;
 };
-
-std::vector<Instance> instances;
 
 void transposematrix(float m[16], aiMatrix4x4 *p)
 {
@@ -296,21 +293,6 @@ void transposematrix(float m[16], aiMatrix4x4 *p)
         m[2] = p->c1; m[6] = p->c2; m[10] = p->c3; m[14] = p->c4;
         m[3] = p->d1; m[7] = p->d2; m[11] = p->d3; m[15] = p->d4;
 }
-
-void instancesFromGraph(struct aiNode *node, aiMatrix4x4 _transform)
-{
-        if (node)
-        {
-                aiMatrix4x4 _t = node->mTransformation * _transform;
-                Instance i(node->mName.data);
-                transposematrix(i.transform, &_t);
-                for (int i = 0; i < node->mNumChildren; i++) {
-                        instancesFromGraph(node->mChildren[i], _t);
-                }
-                instances.push_back(i);
-        }
-}
-
 
 
 class Context
@@ -328,6 +310,8 @@ class Context
         std::vector<Mesh> meshes;
         std::vector<Material> materials;
         std::vector<Camera> cameras;
+
+        std::vector<Instance> instances;
 
         Object *player;
         glm::mat4 look, perspective;
@@ -363,6 +347,19 @@ class Context
         void AssetsFromScene(const struct aiScene*);
         void AddMesh(const struct aiMesh*);
         void AddMaterial(const aiMaterial *_material);
+        void instancesFromGraph(struct aiNode *node, aiMatrix4x4 _transform)
+        {
+                if (node)
+                {
+                        aiMatrix4x4 _t = node->mTransformation * _transform;
+                        Instance i(node->mName.data);
+                        transposematrix(i.transform, &_t);
+                        for (int i = 0; i < node->mNumChildren; i++) {
+                                instancesFromGraph(node->mChildren[i], _t);
+                        }
+                        instances.push_back(i);
+                }
+        }
         void CollisionRoutine(void);
 
         void FreezeInstances();
@@ -738,7 +735,7 @@ void Context::FreezeInstances()
 {
         for (std::shared_ptr<Object> object : objects)
         {
-                for (btRigidBody *instance : object->instances)
+                for (btRigidBody *instance : object->body_instances)
                 {
                         instance->setGravity(btVector3(0,0,0));
                         instance->setActivationState(ISLAND_SLEEPING);
@@ -776,13 +773,12 @@ void Context::Draw()
         t.setIdentity();
         t.setOrigin(player->body->getWorldTransform().getOrigin());
         t.setOrigin(t.getOrigin() + btVector3(forward.x * distance, forward.y * distance, forward.z * distance));
+        t.setOrigin(btVector3(round(t.getOrigin().x()),round(t.getOrigin().y()), round(t.getOrigin().z())));
         opt.camera = t;
         for (std::shared_ptr<Object> object : objects)
         {
-                if (object == objects[o])
-                        opt.highlighted = true;
-                else
-                        opt.highlighted = false;
+
+                opt.selected = object == objects[o] ? true : false;
                 object->draw_buffer(opt);
         }
 
@@ -809,9 +805,10 @@ void Context::PollInput()
 
                                         const float radius = 10;
                                         t.setOrigin(t.getOrigin() + (btVector3(forward.x, forward.y, forward.z) * radius));
+        t.setOrigin(btVector3(round(t.getOrigin().x()),round(t.getOrigin().y()), round(t.getOrigin().z())));
                                         //glm::vec3 eye = glm::vec3(origin.x(), origin.y(), origin.z());
                                         //t.setFromOpenGLMatrix(objects[o]->transform);
-                                        objects[o]->new_instance(world, t, 5.0, NULL);
+                                        objects[o]->new_instance(world, t, 0.0, NULL);
                                         //printf("WEE MOUSEWHEEL %d\n", event.motion.x);
                                         /*
                                            for (auto o : objects) {
@@ -1058,7 +1055,7 @@ void Context::Loop()
                 if (collisionBody && !held_object)
                 {
                         for (std::shared_ptr<Object> o : objects)
-                                for (btRigidBody *bodyInstance : o->instances)
+                                for (btRigidBody *bodyInstance : o->body_instances)
                                 {
                                         if (collisionBody == bodyInstance)
                                         {
@@ -1178,7 +1175,7 @@ void Object::draw_buffer(struct draw_opts opt)
                         glDisable(GL_TEXTURE_2D);
                 }
 
-                for (btRigidBody *b : instances)
+                for (btRigidBody *b : body_instances)
                 {
                         btTransform t;
                         float mat[16];
@@ -1195,7 +1192,7 @@ void Object::draw_buffer(struct draw_opts opt)
                                       );
                 }
 
-                if (opt.highlighted)
+                if (opt.selected)
                 {
                         btTransform t;
                         float mat[16];
@@ -1205,9 +1202,9 @@ void Object::draw_buffer(struct draw_opts opt)
 
                         glUniform1i(glGetUniformLocation (mesh->shader, "isHighlighted"), 1);
 
-                        glUniform4f (glGetUniformLocation(mesh->shader, "color"), 0.0, 0.0, 1.0, 0.5);
+                        glUniform4f (glGetUniformLocation(mesh->shader, "color"), 0.0, 0.0, 1.0, 1.0);
 
-                        //glDrawElements( GL_TRIANGLES, (mesh->elements.size()), GL_UNSIGNED_INT, (void*)0);
+                        glDrawElements( GL_TRIANGLES, (mesh->elements.size()), GL_UNSIGNED_INT, (void*)0);
                 }
                 glBindVertexArray (0);
         } else {
@@ -1217,8 +1214,6 @@ void Object::draw_buffer(struct draw_opts opt)
 
 bool Context::MatchBodyWithInstanceAndMesh(btRigidBody *body, const char *name, const struct aiScene *scene)
 {
-        struct aiNode *node = findnode(scene->mRootNode, name);
-
         for(Instance &i : instances)
         {
                 if (strcmp(name, i.name) == 0)

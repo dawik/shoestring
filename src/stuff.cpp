@@ -1071,11 +1071,6 @@ void Context::Loop()
                 }
                 if (new_resolution)
                 {
-                        /*SDL_FreeSurface(screen_surface);
-                          width = video_modes[mode]->w;
-                          height = video_modes[mode]->h;
-                          screen_surface = SDL_SetVideoMode( width, height, 32, SDL_HWSURFACE | SDL_DOUBLEBUF | SDL_OPENGL | SDL_VIDEORESIZE);
-                          */
                         SDL_GetDisplayMode(0, mode, &video_mode);
                         width = video_mode.w;
                         height = video_mode.h;
@@ -1252,3 +1247,4 @@ bool Context::MatchBodyWithInstanceAndMesh(btRigidBody *body, const char *name, 
         }
         return false;
 }
+

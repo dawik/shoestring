@@ -12,6 +12,7 @@ uniform mat4 camera;
 uniform mat4 perspective;
 uniform vec4 color;
 uniform int texid;
+uniform int isHighlighted;
 uniform sampler2D tex;
 
 uniform vec3 cameraPosition;
@@ -41,10 +42,9 @@ void main()
     //diffuse
     float diffuseCoefficient = max(0.0, dot(normal, surfaceToLight));
     vec3 diffuse = diffuseCoefficient * surfaceColor.rgb * light.intensities;
-    
+
     //specular
     float specularCoefficient = 0.3;
-    if(diffuseCoefficient > 0.0)
     specularCoefficient = pow(max(0.0, dot(surfaceToCamera, reflect(-surfaceToLight, normal))), materialShininess);
     vec3 specular = specularCoefficient * materialSpecularColor * light.intensities;
     
@@ -54,7 +54,7 @@ void main()
 
     //linear color (color before gamma correction)
     //vec3 linearColor = ambient + attenuation*(diffuse + specular); // Specular broken
-    vec3 linearColor = ambient + attenuation*(diffuse);
+    vec3 linearColor = ambient + attenuation*(diffuse + specular);
     
     //final color (after gamma correction)
     vec3 gamma = vec3(1.0/2.2);
@@ -63,9 +63,23 @@ void main()
 
     const float crossRadius = 0.003;
     float d = sqrt(pow(tv.x/tv.z, 2) + pow(tv.y/tv.z, 2));
-    if (d < crossRadius)
+    if (sky == 0)
+    {
+            finalColor = surfaceColor;
+            finalColor.rgb * gamma;
+            finalColor.rgb * gamma;
+            finalColor.r = 0.1;
+    }
+    else if (d < crossRadius)
             finalColor = vec4(0.75,0,0,0.1);
     else
+    {
             finalColor = vec4(pow(linearColor, gamma), surfaceColor.a);
+            if (isHighlighted > 0)
+            {
+                    finalColor *= color;
+            }
+    }
+
     //finalColor = vec4(finalColor.xyz*0.01 + normalFrag, 1.0);
 }

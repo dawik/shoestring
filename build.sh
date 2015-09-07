@@ -14,3 +14,7 @@ echo "Bullet built"
 cd ../../assimp
 cmake -G 'Unix Makefiles'
 make
+
+cd ../freetype-gl
+cmake -G 'Unix Makefiles'
+make

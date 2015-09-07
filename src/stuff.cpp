@@ -49,6 +49,49 @@ struct draw_opts
         btTransform camera;
 };
 
+// An array of 3 vectors which represents 3 vertices
+static const GLfloat g_vertex_buffer_data[] = {
+   1.0f, -.33f, 0.0f,
+   -1.0f, -.33f, 0.0f,
+   -1.0f, -1.f, 0.0f,
+   1.0f, -1.f, 0.0f,
+   1.0f, -.33f, 0.0f,
+};
+
+GLuint vertexbuffer, triangle_shader;
+void setup_triangle()
+{
+        // This will identify our vertex buffer
+
+        // Generate 1 buffer, put the resulting identifier in vertexbuffer
+        glGenBuffers(1, &vertexbuffer);
+
+        // The following commands will talk about our 'vertexbuffer' buffer
+        glBindBuffer(GL_ARRAY_BUFFER, vertexbuffer);
+
+        // Give our vertices to OpenGL.
+        glBufferData(GL_ARRAY_BUFFER, sizeof(g_vertex_buffer_data), g_vertex_buffer_data, GL_STATIC_DRAW);
+}
+
+void draw_triangle()
+{
+        // 1rst attribute buffer : vertices
+        glEnableVertexAttribArray(0);
+        glBindBuffer(GL_ARRAY_BUFFER, vertexbuffer);
+        glVertexAttribPointer(
+                        0,                  // attribute 0. No particular reason for 0, but must match the layout in the shader.
+                        3,                  // size
+                        GL_FLOAT,           // type
+                        GL_FALSE,           // normalized?
+                        0,                  // stride
+                        (void*)0            // array buffer offset
+                        );
+
+        // Draw the triangle !
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 5); // Starting from vertex 0; 3 vertices total -> 1 triangle
+
+        glDisableVertexAttribArray(0);
+}
 
 class Material
 {
@@ -273,7 +316,6 @@ void Mesh::init_buffer(GLuint activeShader)
 
         glBindVertexArray (0);
 
-
 }
 
 struct Instance {
@@ -294,12 +336,8 @@ void transposematrix(float m[16], aiMatrix4x4 *p)
         m[3] = p->d1; m[7] = p->d2; m[11] = p->d3; m[15] = p->d4;
 }
 
-
 class Context
 {
-        class Window
-        {
-        };
         std::shared_ptr<btDiscreteDynamicsWorld> world;
         std::shared_ptr<btCollisionDispatcher> dispatcher;
         std::shared_ptr<btCollisionConfiguration> collisionConfig;
@@ -360,39 +398,15 @@ class Context
                         instances.push_back(i);
                 }
         }
-        void CollisionRoutine(void);
 
-        void FreezeInstances();
-
-        public: 
-        Context(int argc, char **)
+        void Init_SDL(void)
         {
-                if (argc != 1)
-                {
-                        throw std::invalid_argument("No command line interface yet\n");
-                } 
-
-                // When importing collision shapes and constraints from blender, the mesh needs to be -Y forward +Z up
-                const char *scene_filename = "assets/sandbox.fbx", *physics_file = "assets/sandbox.bullet";
-
-                for (unsigned long i = 0, sep = 0; i < strlen(scene_filename); i++)
-                {
-                        if (scene_filename[i] == '/')
-                                sep = i;
-                        if (i == strlen(scene_filename) - 1)
-                        {
-                                sep = sep ? sep + 1 : 0;
-                                strncat(path, scene_filename, sizeof(char) * (sep));
-                        }
-                }
-
-                srand(time(NULL));
-
                 SDL_Init( SDL_INIT_VIDEO );
                 //SDL_WM_GrabInput(SDL_GRAB_OFF);
                 SDL_SetRelativeMouseMode(SDL_TRUE);
                 SDL_ShowCursor(0);
                 mode = 1;
+
                 if (SDL_GetDisplayMode(0, 0, &video_mode) != 0) {
                         SDL_Log("SDL_GetDisplayMode failed: %s", SDL_GetError());
                         exit(1);       
@@ -405,24 +419,42 @@ class Context
                 width = 1920;
                 height = 1080;
                 window = SDL_CreateWindow("Shoestring Game Engine", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width, height, SDL_WINDOW_OPENGL | SDL_WINDOW_MAXIMIZED);
+        }
+
+        void Init_GL(void)
+        {
                 SDL_GL_CreateContext(window);
                 glewExperimental = GL_TRUE;
                 glewInit(); 
                 shader = compile_shader(read_file("src/standard.vert.glsl"), read_file("src/standard.frag.glsl"));
+                triangle_shader = compile_shader(read_file("src/ui.vs.glsl"), read_file("src/ui.fs.glsl"));
+
                 glUseProgram(shader);
                 glEnable(GL_BLEND);
-                glBlendFunc(GL_SRC_COLOR, GL_ZERO);
+                //glBlendFunc(GL_SRC_COLOR, GL_ZERO);
+                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
                 gl_error();
+        }
 
+        void Init_Bullet()
+        {
+                collisionConfig.reset(new btDefaultCollisionConfiguration());
+                dispatcher.reset(new btCollisionDispatcher(&*collisionConfig));
+                broadphase.reset(new btDbvtBroadphase());
+                solver.reset(new btSequentialImpulseConstraintSolver());
+                world.reset(new btDiscreteDynamicsWorld(&*dispatcher,&*broadphase,&*solver,&*collisionConfig));
+        }
 
+        void Load_Scene(const char *scene_file)
+        {
                 Assimp::Importer importer;
-                const struct aiScene *scene = importer.ReadFile(scene_filename,aiProcessPreset_TargetRealtime_Fast);
-                printf("Loading scene from %s\n\t%s\n", scene_filename, importer.GetErrorString());
+                const struct aiScene *scene = importer.ReadFile(scene_file, aiProcessPreset_TargetRealtime_Fast);
+                printf("Loading scene from %s\n\t%s\n", scene_file, importer.GetErrorString());
 
-                aiMatrix4x4 mat;
+                aiMatrix4x4 root_transform;
 
-                instancesFromGraph(scene->mRootNode, mat);
+                instancesFromGraph(scene->mRootNode, root_transform);
 
                 AssetsFromScene(scene);
 
@@ -431,22 +463,20 @@ class Context
                         mesh.init_buffer(shader);
                 }
 
-                collisionConfig.reset(new btDefaultCollisionConfiguration());
-                dispatcher.reset(new btCollisionDispatcher(&*collisionConfig));
-                broadphase.reset(new btDbvtBroadphase());
-                solver.reset(new btSequentialImpulseConstraintSolver());
-                world.reset(new btDiscreteDynamicsWorld(&*dispatcher,&*broadphase,&*solver,&*collisionConfig));
+        }
 
+        void Load_World(const char *bullet_file)
+        {
                 btBulletWorldImporter*		m_fileLoader;
                 m_fileLoader = new btBulletWorldImporter(&*world);
 
-                printf("Physics file %s\n", physics_file);
+                printf("Physics file %s\n", bullet_file);
                 m_fileLoader->setVerboseMode(false);
 
-                if (m_fileLoader->loadFile(physics_file))
+                if (m_fileLoader->loadFile(bullet_file))
                 {
                         printf("Loaded %s....\n%d\tconstraints\n%d\trigid bodies\n", 
-                                        physics_file, m_fileLoader->getNumConstraints(), m_fileLoader->getNumRigidBodies());
+                                        bullet_file, m_fileLoader->getNumConstraints(), m_fileLoader->getNumRigidBodies());
                         for(int i=0; i < m_fileLoader->getNumRigidBodies(); i++)
                         {
                                 btCollisionObject* obj = m_fileLoader->getRigidBodyByIndex(i);
@@ -454,7 +484,7 @@ class Context
                                 const char *name = m_fileLoader->getNameForPointer(body);
                                 if (body)
                                 {
-                                        if (MatchBodyWithInstanceAndMesh(body, name, scene) == false)
+                                        if (MatchBodyWithInstanceAndMesh(body, name) == false)
                                         {
                                                 printf("Failed to assign body %s\n", name);
                                                 exit(4);
@@ -494,7 +524,7 @@ class Context
                                 }
                         }
 
-                        if (cameras.size() > 0)
+                        if (cameras.size())
                         {
                                 Camera cam = cameras.at(0);
                                 pitch = twopi;
@@ -531,8 +561,49 @@ class Context
                 }
                 else 
                 {
-                        throw std::runtime_error("Failed to load");
+                        throw std::runtime_error("Failed to physics data");
                 }
+        }
+        void CollisionRoutine(void);
+
+        void FreezeInstances();
+
+        public: 
+        Context(int argc, char **)
+        {
+                if (argc != 1)
+                {
+                        throw std::invalid_argument("No command line interface yet\n");
+                } 
+
+                srand(time(NULL));
+
+                Init_SDL();
+
+                Init_GL();
+
+                Init_Bullet();
+
+                setup_triangle();
+
+                const char *scene = "assets/sandbox.fbx", *physics = "assets/sandbox.bullet";
+                // Note: Mesh needs to be -Y forward +Z up, 
+                // to align properly with collision shapes from Bullet
+
+                for (unsigned long i = 0, sep = 0; i < strlen(scene); i++)
+                {
+                        if (scene[i] == '/')
+                                sep = i;
+                        if (i == strlen(scene) - 1)
+                        {
+                                sep = sep ? sep + 1 : 0;
+                                strncat(path, scene, sizeof(char) * (sep));
+                        }
+                }
+
+                Load_Scene(scene);
+
+                Load_World(physics);
         }
         ~Context()
         {
@@ -543,7 +614,7 @@ class Context
         void UpdatePosition();
         void PollWindow();
         void Loop();
-        bool MatchBodyWithInstanceAndMesh(btRigidBody *body, const char *name, const struct aiScene *scene);
+        bool MatchBodyWithInstanceAndMesh(btRigidBody *body, const char *name);
         void AddObject(const char *name, btRigidBody *body, Mesh *mesh, float transform[16]);
 };
 
@@ -758,6 +829,7 @@ void Context::Draw()
         look =  glm::lookAt(eye, eye + (forward * float(5)), up);
         perspective =  glm::perspective(fov, aspect, near, far);
 
+        glUseProgram(shader);
         glUniformMatrix4fv (glGetUniformLocation (shader, "camera"), 1, GL_FALSE, glm::value_ptr(look));
         glUniformMatrix4fv (glGetUniformLocation (shader, "perspective"), 1, GL_FALSE, glm::value_ptr(perspective));
         glUniform3f (glGetUniformLocation (shader, "cameraPosition"), t.getOrigin().x(), 
@@ -767,7 +839,6 @@ void Context::Draw()
         //glEnable(GL_CULL_FACE);
         glEnable(GL_DEPTH_TEST);
         glDepthMask(GL_TRUE);
-        glUseProgram(shader);
         struct draw_opts opt;
         const float distance = 10.0;
         t.setIdentity();
@@ -781,6 +852,9 @@ void Context::Draw()
                 opt.selected = object == objects[o] ? true : false;
                 object->draw_buffer(opt);
         }
+
+        glUseProgram(triangle_shader);
+        draw_triangle();
 
         //glDisable(GL_CULL_FACE);
         glDisable(GL_TEXTURE_2D);
@@ -805,7 +879,7 @@ void Context::PollInput()
 
                                         const float radius = 10;
                                         t.setOrigin(t.getOrigin() + (btVector3(forward.x, forward.y, forward.z) * radius));
-        t.setOrigin(btVector3(round(t.getOrigin().x()),round(t.getOrigin().y()), round(t.getOrigin().z())));
+                                        t.setOrigin(btVector3(round(t.getOrigin().x()),round(t.getOrigin().y()), round(t.getOrigin().z())));
                                         //glm::vec3 eye = glm::vec3(origin.x(), origin.y(), origin.z());
                                         //t.setFromOpenGLMatrix(objects[o]->transform);
                                         objects[o]->new_instance(world, t, 0.0, NULL);
@@ -1047,6 +1121,16 @@ void Context::Loop()
         {
                 tick = SDL_GetTicks();
                 world->stepSimulation(1/60.0);
+                for (std::shared_ptr<Object> o : objects)
+                {
+                        if (strcmp(o->name, "ui_cube") == 0)
+                        {
+                                btTransform t;
+                                player->body->getMotionState()->getWorldTransform(t);
+                                o->body->setWorldTransform(t);
+                                printf("GOT CUBE!#\n");
+                        }
+                }
                 CollisionRoutine();
                 PollInput();
                 UpdatePosition();
@@ -1212,7 +1296,7 @@ void Object::draw_buffer(struct draw_opts opt)
         }
 }
 
-bool Context::MatchBodyWithInstanceAndMesh(btRigidBody *body, const char *name, const struct aiScene *scene)
+bool Context::MatchBodyWithInstanceAndMesh(btRigidBody *body, const char *name)
 {
         for(Instance &i : instances)
         {

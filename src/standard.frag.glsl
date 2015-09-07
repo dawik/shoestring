@@ -80,6 +80,7 @@ void main()
                     finalColor = color;
             }
     }
+    finalColor.a = 1.0;
 
     //finalColor = vec4(finalColor.xyz*0.01 + normalFrag, 1.0);
 }

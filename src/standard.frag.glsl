@@ -54,7 +54,7 @@ void main()
 
     //linear color (color before gamma correction)
     //vec3 linearColor = ambient + attenuation*(diffuse + specular); // Specular broken
-    vec3 linearColor = ambient + attenuation*(diffuse + specular);
+    vec3 linearColor = ambient + attenuation*(diffuse);
     
     //final color (after gamma correction)
     vec3 gamma = vec3(1.0/2.2);
@@ -78,9 +78,9 @@ void main()
             if (isHighlighted > 0)
             {
                     finalColor = color;
+                    finalColor.a = 0.5;
             }
     }
-    finalColor.a = 1.0;
 
     //finalColor = vec4(finalColor.xyz*0.01 + normalFrag, 1.0);
 }

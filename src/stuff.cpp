@@ -27,12 +27,11 @@
 
 char* read_file(const char* filename);
 GLuint compile_shader(const char* vertex, const char* fragment);
+void gl_error();
 
 const float twopi = 6.28318530718;
 const float player_mass = 1.0;
 const glm::vec3 up(0,0,-1);
-
-int o = 0; 
 
 struct draw_opts
 {
@@ -44,12 +43,15 @@ struct draw_opts
 class UI
 {
         private:
-                const GLfloat ui_vertex_data[15] = {
+                const GLfloat ui_vertex_data[18] = {
+                        -1.0f, -.33f, 0.0f,
+                        -1.0f, -1.0f, 0.0f,
+                        1.0f, -1.0f, 0.0f,
+
+                        1.0f, -1.0f, 0.0f,
                         1.0f, -.33f, 0.0f,
                         -1.0f, -.33f, 0.0f,
-                        -1.0f, -1.f, 0.0f,
-                        1.0f, -1.f, 0.0f,
-                        1.0f, -.33f, 0.0f,
+
                 };
 
                 GLuint vertexbuffer, shader;
@@ -69,7 +71,7 @@ class UI
                         glBindBuffer(GL_ARRAY_BUFFER, vertexbuffer);
                         glVertexAttribPointer( 0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
 
-                        glDrawArrays(GL_TRIANGLE_STRIP, 0, 5);
+                        glDrawArrays(GL_TRIANGLES, 0, 6);
 
                         glDisableVertexAttribArray(0);
                 }
@@ -342,6 +344,8 @@ class Context
         int mode;
         int new_resolution;
         int input[8];
+        int current_object = 0; 
+
         char path[256];
         float pitch; 
         float yaw;
@@ -370,9 +374,9 @@ class Context
         {
                 if (node)
                 {
+                        // Store node name and transposed world transformation
                         aiMatrix4x4 _t = node->mTransformation * _transform;
                         Instance i(node->mName.data);
-                        // Transpose and store node world transformation
                         i.transform[0] = _t.a1; i.transform[4] = _t.a2; i.transform[8] = _t.a3; i.transform[12] = _t.a4;
                         i.transform[1] = _t.b1; i.transform[5] = _t.b2; i.transform[9] = _t.b3; i.transform[13] = _t.b4;
                         i.transform[2] = _t.c1; i.transform[6] = _t.c2; i.transform[10] = _t.c3; i.transform[14] = _t.c4;
@@ -393,9 +397,8 @@ class Context
                         file.seekg(i*sizeof(Instance));
                         file.read(reinterpret_cast<char *>(&instance),sizeof(Instance));
                         instances.push_back(instance);
-                        //cout<<p_Data.SiteName<<endl;
-                        //cout<<"Rank: "<< p_Data.Rank<<endl;
                 }
+                printf("Loaded %d instances from file\n", instances.size());
                 file.close();
         }
         void instancesToFile(const char *filename)
@@ -649,9 +652,9 @@ class Context
                         }
                 }
 
-                Load_Scene(scene, true);
+                Load_Scene(scene, false);
 
-                //instancesFromFile("testdata.dat");
+                instancesFromFile("testdata.dat");
 
                 Load_World(physics);
         }
@@ -886,7 +889,7 @@ void Context::Draw()
                         t.getOrigin().y(), 
                         t.getOrigin().z()); 
 
-        //glEnable(GL_CULL_FACE);
+        glEnable(GL_CULL_FACE);
         glEnable(GL_DEPTH_TEST);
         glDepthMask(GL_TRUE);
         struct draw_opts opt;
@@ -898,16 +901,22 @@ void Context::Draw()
         opt.camera = t;
         for (std::shared_ptr<Object> object : objects)
         {
-
-                opt.selected = object == objects[o] ? true : false;
-                object->draw_buffer(opt);
+                opt.selected = object == objects[current_object] ? true : false;
+                if (!opt.selected)
+                        object->draw_buffer(opt);
+        }
+        for (std::shared_ptr<Object> object : objects)
+        {
+                opt.selected = object == objects[current_object] ? true : false;
+                if (opt.selected)
+                        object->draw_buffer(opt);
         }
 
         ui.draw();
 
-        //glDisable(GL_CULL_FACE);
-        glDisable(GL_TEXTURE_2D);
+        glDisable(GL_CULL_FACE);
         glDisable(GL_DEPTH_TEST);
+        glDisable(GL_TEXTURE_2D);
 }
 
 enum {LEFT = 0, RIGHT = 1, FORWARD = 2, BACK = 3, LEFT_CLICK = 4, RIGHT_CLICK = 5, MIDDLE_CLICK = 6, JUMP = 7};
@@ -930,15 +939,15 @@ void Context::PollInput()
                                         t.setOrigin(t.getOrigin() + (btVector3(forward.x, forward.y, forward.z) * radius));
                                         t.setOrigin(btVector3(round(t.getOrigin().x()),round(t.getOrigin().y()), round(t.getOrigin().z())));
                                         //glm::vec3 eye = glm::vec3(origin.x(), origin.y(), origin.z());
-                                        //t.setFromOpenGLMatrix(objects[o]->transform);
-                                        Instance instance = objects[o]->new_instance(world, t, 0.0, NULL);
+                                        //t.setFromOpenGLMatrix(objects[current_object]->transform);
+                                        Instance instance = objects[current_object]->new_instance(world, t, 0.0, NULL);
                                         instances.push_back(instance);
                                         //printf("WEE MOUSEWHEEL %d\n", event.motion.x);
                                         /*
-                                           for (auto o : objects) {
+                                           for (auto current_object : objects) {
                                            btTransform t;
-                                           t.setFromOpenGLMatrix(o->transform);
-                                           o->new_instance(world, t, 10, NULL);
+                                           t.setFromOpenGLMatrix(current_object->transform);
+                                           current_object->new_instance(world, t, 10, NULL);
                                            }
                                            */
                                         break;
@@ -975,16 +984,12 @@ void Context::PollInput()
                                         float pitch_motion = sensitivity * event.motion.xrel;
                                         float yaw_motion = sensitivity * event.motion.yrel;
                                         yaw += yaw_motion;
+                                        // Limit yaw to avoid inverting up and down
                                         if (yaw < 4.75 || yaw > 7.8)
-                                                //if (yaw < 0.75 * twopi || yaw > twopi + (0.25 * twopi))
                                                 yaw-=yaw_motion;
-                                        if (yaw > 2 * twopi) 
-                                                yaw = yaw - twopi;
-                                        else if (yaw < 0) 
-                                                yaw = twopi + yaw;
                                         if (pitch > 2 * twopi) 
                                                 pitch = pitch - twopi;
-                                        else if (pitch < 0)
+                                        else if (pitch < twopi)
                                                 pitch = twopi + pitch;
                                         else pitch += pitch_motion;
                                         break;
@@ -1301,12 +1306,20 @@ void Object::draw_buffer(struct draw_opts opt)
 
                         glUniformMatrix4fv (glGetUniformLocation (mesh->shader, "model"), 1, GL_FALSE, mat);
 
+                        if (strcmp(name, "Sky") == 0)
+                        {
+                                glDisable(GL_CULL_FACE);
+                        }
                         glDrawElements(
                                         GL_TRIANGLES,
                                         (mesh->elements.size()),
                                         GL_UNSIGNED_INT,
                                         (void*)0
                                       );
+                        if (strcmp(name, "Sky") == 0)
+                        {
+                                glEnable(GL_CULL_FACE);
+                        }
                 }
 
                 if (opt.selected)

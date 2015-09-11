@@ -10,6 +10,7 @@
 #include <vector>
 #include <fstream>
 #include <iostream>
+#include <unordered_map>
 #include <stdio.h>
 
 #include <assimp/Importer.hpp>
@@ -88,6 +89,8 @@ class Material
                 float specular[4] = {1,1,1,1};
 };
 
+std::vector<Material> materials;
+
 class Mesh
 {
         public:
@@ -103,7 +106,7 @@ class Mesh
 
                 void init_buffer(GLuint);
 
-                Material *material;
+                unsigned int material_idx;
 
                 GLuint shader;
 
@@ -142,7 +145,7 @@ class Object
 
                 float rgba[4];
 
-                Mesh *mesh;
+                std::shared_ptr<Mesh> mesh;
 
                 float transform[16];
 
@@ -150,7 +153,7 @@ class Object
 
                 std::vector<btRigidBody*> body_instances;
 
-                Object(const char *_name, btRigidBody* _body, Mesh* _mesh)
+                Object(const char *_name, btRigidBody* _body, std::shared_ptr<Mesh>_mesh)
                 {
                         rgba[0] = 1.0;
                         rgba[1] = 1.0;
@@ -161,7 +164,7 @@ class Object
                         mesh = _mesh;
                 }
 
-                Object(const char *_name, btRigidBody* _body, Mesh* _mesh, float tint[4])
+                Object(const char *_name, btRigidBody* _body, std::shared_ptr<Mesh> _mesh, float tint[4])
                 {
                         rgba[0] = tint[0];
                         rgba[1] = tint[1];
@@ -200,7 +203,7 @@ class Object
 
                 btRigidBody *body;
 
-                void draw_buffer(struct draw_opts opt);
+                void draw_buffer(struct draw_opts opt, Material *material);
 };
 
 void gl_error()
@@ -327,9 +330,10 @@ class Context
         std::shared_ptr<btSequentialImpulseConstraintSolver> solver;
 
         std::vector<std::shared_ptr<Object>> objects;
-        std::vector<Mesh> meshes;
-        std::vector<Material> materials;
         std::vector<Camera> cameras;
+
+        std::unordered_map<std::string, std::shared_ptr<Object>> object_map;
+        std::unordered_map<std::string, std::shared_ptr<Mesh>> mesh_map;
 
         std::vector<Instance> instances;
 
@@ -398,7 +402,7 @@ class Context
                         file.read(reinterpret_cast<char *>(&instance),sizeof(Instance));
                         instances.push_back(instance);
                 }
-                printf("Loaded %d instances from file\n", instances.size());
+                printf("Loaded %lu instances from file\n", instances.size());
                 file.close();
         }
         void instancesToFile(const char *filename)
@@ -444,7 +448,6 @@ class Context
 
                 glUseProgram(shader);
                 glEnable(GL_BLEND);
-                //glBlendFunc(GL_SRC_COLOR, GL_ZERO);
                 glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
                 gl_error();
@@ -472,9 +475,9 @@ class Context
 
                 AssetsFromScene(scene);
 
-                for (Mesh &mesh : meshes)
+                for (auto const &mesh : mesh_map)
                 {
-                        mesh.init_buffer(shader);
+                        mesh.second->init_buffer(shader);
                 }
 
         }
@@ -506,37 +509,6 @@ class Context
                                         else
                                         {
                                                 printf("Added object %s\n", name);
-                                        }
-                                }
-
-                        }
-                        for (Instance &i: instances)
-                        {
-                                if (strcmp("Sky", i.name) == 0)
-                                {
-                                        float sky_h = 0.1;
-                                        float sky_r = 0.1;
-
-                                        btCapsuleShape *sky_shape=new btCapsuleShape(sky_h, sky_r);
-
-                                        btVector3 inertia(0,0,0);
-                                        sky_shape->calculateLocalInertia(player_mass,inertia);
-
-                                        btTransform t;  
-                                        t.setFromOpenGLMatrix(i.transform);
-                                        btMotionState* motion=new btDefaultMotionState(t);
-
-                                        btRigidBody::btRigidBodyConstructionInfo info(0.0,motion,sky_shape,inertia);
-                                        btRigidBody *_b = new btRigidBody(info);
-                                        for (Mesh &m : meshes)
-                                        {
-                                                if (strcmp("Sky", m.name) == 0)
-                                                {
-                                                        float color[4] = { 1.0, 1.0, 1.0, 1.0 };
-                                                        std::shared_ptr<Object> object(new Object("Sky", _b, &m, color));
-                                                        object->new_instance(world, t, 1.0 / _b->getInvMass(), _b);
-                                                        objects.push_back(object);
-                                                }
                                         }
                                 }
                         }
@@ -725,44 +697,45 @@ struct aiNode *findnode(struct aiNode *node, const char *name)
 
 void Context::AddMesh(const aiMesh *_mesh)
 {
-        Mesh mesh;
-        strcpy(mesh.name, _mesh->mName.C_Str());
-        mesh.numElements = _mesh->mNumFaces * 3;
+        std::shared_ptr<Mesh> mesh(new Mesh());
+        strcpy(mesh->name, _mesh->mName.C_Str());
+        mesh->numElements = _mesh->mNumFaces * 3;
         for (unsigned int j = 0; j < _mesh->mNumVertices; j++)
         {
-                mesh.vertexdata.push_back(_mesh->mVertices[j].x);
-                mesh.vertexdata.push_back(_mesh->mVertices[j].y);
-                mesh.vertexdata.push_back(_mesh->mVertices[j].z);
+                mesh->vertexdata.push_back(_mesh->mVertices[j].x);
+                mesh->vertexdata.push_back(_mesh->mVertices[j].y);
+                mesh->vertexdata.push_back(_mesh->mVertices[j].z);
 
                 if (_mesh->mNormals)
                 {
-                        mesh.vertexdata.push_back(_mesh->mNormals[j].x);
-                        mesh.vertexdata.push_back(_mesh->mNormals[j].y);
-                        mesh.vertexdata.push_back(_mesh->mNormals[j].z);
+                        mesh->vertexdata.push_back(_mesh->mNormals[j].x);
+                        mesh->vertexdata.push_back(_mesh->mNormals[j].y);
+                        mesh->vertexdata.push_back(_mesh->mNormals[j].z);
                 }
 
                 if (_mesh->mTextureCoords[0])
                 {
-                        mesh.vertexdata.push_back(_mesh->mTextureCoords[0][j].x);
-                        mesh.vertexdata.push_back(_mesh->mTextureCoords[0][j].y);
-                        mesh.hasTexture = true;
+                        mesh->vertexdata.push_back(_mesh->mTextureCoords[0][j].x);
+                        mesh->vertexdata.push_back(_mesh->mTextureCoords[0][j].y);
+                        mesh->hasTexture = true;
                 }
         }
 
         for (unsigned int j = 0; j < _mesh->mNumFaces; j++)
         {
-                mesh.elements.push_back(_mesh->mFaces[j].mIndices[0]);
-                mesh.elements.push_back(_mesh->mFaces[j].mIndices[1]);
-                mesh.elements.push_back(_mesh->mFaces[j].mIndices[2]);
+                mesh->elements.push_back(_mesh->mFaces[j].mIndices[0]);
+                mesh->elements.push_back(_mesh->mFaces[j].mIndices[1]);
+                mesh->elements.push_back(_mesh->mFaces[j].mIndices[2]);
         }
 
-        if (mesh.hasTexture)
+        if (mesh->hasTexture)
         {
-                mesh.material = &materials.at(_mesh->mMaterialIndex);
-                mesh.texture = materials.at(_mesh->mMaterialIndex).texture;
+                mesh->material_idx = _mesh->mMaterialIndex;
+                mesh->texture = materials.at(_mesh->mMaterialIndex).texture;
         }
 
-        meshes.push_back(mesh);
+        mesh_map[std::string(_mesh->mName.C_Str())] = mesh;
+        //meshes.push_back(mesh);
 };
 
 void Context::AddMaterial(const struct aiMaterial *_material)
@@ -778,17 +751,17 @@ void Context::AddMaterial(const struct aiMaterial *_material)
                 strcpy(filename, path);
                 strcat(filename, str.data);
                 strcpy(material.bitmap_file, filename);
-                material.texture = -1;
+                bool duplicateTexture = false;
                 for(Material &m : materials)
                 {
                         if (strcmp(filename, m.bitmap_file) == 0)
                         {
                                 material.texture = m.texture;
-                                printf("Found existing texture\n");
+                                duplicateTexture = true;
                                 break;
                         }
                 }
-                if (material.texture < 0)
+                if (!duplicateTexture)
                 {
                         material.texture = loadtexture(filename);
                 }
@@ -811,9 +784,7 @@ void Context::AddMaterial(const struct aiMaterial *_material)
         material.specular[1] = color.g;
         material.specular[2] = color.b;
         material.specular[3] = 1.0;
-        //printf("Material color %f %f %f\n", color.r,color.g,color.b);
         _material->Get(AI_MATKEY_SHININESS,material.shininess);
-        //printf("Material %s diffuse color %f %f %f\n", material.name, material.specular[0],material.specular[1],material.specular[2]);
         materials.push_back(material);
 }
 
@@ -825,10 +796,18 @@ void Context::AssetsFromScene(const struct aiScene *scene)
         {
                 AddMaterial(scene->mMaterials[i]);
         }
+
+        int i = 0;
+        for (auto &m : materials)
+        {
+                printf("Material %d shininess %f RGB %f %f %f\n", i++, m.shininess, m.diffuse[0], m.diffuse[1], m.diffuse[2]);
+        }
+
         for (unsigned int i = 0; i < scene->mNumMeshes; i++)
         {
                 AddMesh(scene->mMeshes[i]);
         }
+
 
         for (unsigned int i = 0; i < scene->mNumCameras; i++)
         {
@@ -899,17 +878,14 @@ void Context::Draw()
         t.setOrigin(t.getOrigin() + btVector3(forward.x * distance, forward.y * distance, forward.z * distance));
         t.setOrigin(btVector3(round(t.getOrigin().x()),round(t.getOrigin().y()), round(t.getOrigin().z())));
         opt.camera = t;
-        for (std::shared_ptr<Object> object : objects)
+        for (const auto &object : object_map)
         {
-                opt.selected = object == objects[current_object] ? true : false;
-                if (!opt.selected)
-                        object->draw_buffer(opt);
-        }
-        for (std::shared_ptr<Object> object : objects)
-        {
-                opt.selected = object == objects[current_object] ? true : false;
-                if (opt.selected)
-                        object->draw_buffer(opt);
+                Material defaultMaterial;
+                opt.selected = false;
+                if (object.second->mesh->hasTexture)
+                        object.second->draw_buffer(opt, &materials.at(object.second->mesh->material_idx));
+                else
+                        object.second->draw_buffer(opt, &defaultMaterial);
         }
 
         ui.draw();
@@ -938,18 +914,8 @@ void Context::PollInput()
                                         const float radius = 10;
                                         t.setOrigin(t.getOrigin() + (btVector3(forward.x, forward.y, forward.z) * radius));
                                         t.setOrigin(btVector3(round(t.getOrigin().x()),round(t.getOrigin().y()), round(t.getOrigin().z())));
-                                        //glm::vec3 eye = glm::vec3(origin.x(), origin.y(), origin.z());
-                                        //t.setFromOpenGLMatrix(objects[current_object]->transform);
-                                        Instance instance = objects[current_object]->new_instance(world, t, 0.0, NULL);
+                                        Instance instance = object_map["Cube.001"]->new_instance(world, t, 0.0, NULL);
                                         instances.push_back(instance);
-                                        //printf("WEE MOUSEWHEEL %d\n", event.motion.x);
-                                        /*
-                                           for (auto current_object : objects) {
-                                           btTransform t;
-                                           t.setFromOpenGLMatrix(current_object->transform);
-                                           current_object->new_instance(world, t, 10, NULL);
-                                           }
-                                           */
                                         break;
                                 }
                         case SDL_MOUSEBUTTONDOWN:
@@ -1182,8 +1148,8 @@ void Context::Loop()
                 btRigidBody *collisionBody = FirstCollisionRayTrace(width/2, height/2);
                 if (collisionBody && !held_object)
                 {
-                        for (std::shared_ptr<Object> o : objects)
-                                for (btRigidBody *bodyInstance : o->body_instances)
+                        for (auto &o : object_map)
+                                for (btRigidBody *bodyInstance : o.second->body_instances)
                                 {
                                         if (collisionBody == bodyInstance)
                                         {
@@ -1271,21 +1237,22 @@ btRigidBody *Context::FirstCollisionRayTrace(int x, int y)
         return NULL;
 }
 
-void Object::draw_buffer(struct draw_opts opt)
+void Object::draw_buffer(struct draw_opts opt, Material *material)
 {
         if (mesh)
         {
+
                 glBindVertexArray (mesh->vao);
                 glUniform4f (glGetUniformLocation(mesh->shader, "color"), (GLfloat) rgba[0], (GLfloat) rgba[1], (GLfloat) rgba[2], (GLfloat) rgba[3]);
                 glUniform3f(glGetUniformLocation (mesh->shader, "light.position"), 10000, 10, 1000000);
-                glUniform3f(glGetUniformLocation (mesh->shader, "light.intensities"), mesh->material->diffuse[0],mesh->material->diffuse[0],mesh->material->diffuse[0]); 
+                glUniform3f(glGetUniformLocation (mesh->shader, "light.intensities"), material->diffuse[0],material->diffuse[0],material->diffuse[0]); 
                 glUniform1i(glGetUniformLocation (mesh->shader, "sky"), strcmp(name, "Sky"));
                 GLint texid = mesh->hasTexture ? mesh->texture : -1;
                 glUniform1i(glGetUniformLocation (mesh->shader, "texid"), texid);
                 glUniform1i(glGetUniformLocation (mesh->shader, "isHighlighted"), 0);
                 glUniform1f(glGetUniformLocation (mesh->shader, "light.ambientCoefficient"), 0.01);
-                glUniform1f(glGetUniformLocation (mesh->shader, "materialShininess"), mesh->material->shininess);
-                glUniform3f(glGetUniformLocation (mesh->shader, "materialSpecularColor"), mesh->material->specular[0],mesh->material->specular[0],mesh->material->specular[0]); 
+                glUniform1f(glGetUniformLocation (mesh->shader, "materialShininess"), material->shininess);
+                glUniform3f(glGetUniformLocation (mesh->shader, "materialSpecularColor"), material->specular[0],material->specular[0],material->specular[0]); 
 
                 if (mesh->hasTexture) {
                         glEnable(GL_TEXTURE_2D);
@@ -1346,30 +1313,31 @@ bool Context::MatchBodyWithInstanceAndMesh(btRigidBody *body, const char *name)
 {
         for(Instance &i : instances)
         {
-                if (strcmp(name, i.name) == 0)
+                char _copyName[256];
+                strcpy(_copyName, name);
+                _copyName[strlen(name) - 4] = '\0';
+                //std::shared_ptr<Mesh> m(mesh_map.at(name));
+                if (strcmp(name, mesh_map.at(name)->name) == 0 || strcmp(_copyName, mesh_map.at(name)->name) == 0)
                 {
-                        for(Mesh &m : meshes)
-                        {
-                                char _copyName[256];
-                                strcpy(_copyName, name);
-                                _copyName[strlen(name) - 4] = '\0';
-                                if (strcmp(name, m.name) == 0 || strcmp(_copyName, m.name) == 0)
-                                {
-                                        btTransform t;
-                                        t.setFromOpenGLMatrix(i.transform);
+                        btTransform t;
+                        t.setFromOpenGLMatrix(i.transform);
 
-                                        float random_color[4] = { (float) rand() / RAND_MAX, (float) rand() / RAND_MAX, (float) rand() / RAND_MAX, 1.0 };
-                                        std::shared_ptr<Object> object(new Object(name, body, &m, random_color));
+                        float random_color[4] = { (float) rand() / RAND_MAX, (float) rand() / RAND_MAX, (float) rand() / RAND_MAX, 1.0 };
+                        std::shared_ptr<Object> object(new Object(name, body, mesh_map.at(name), random_color));
 
-                                        object->new_instance(world, t, 1.0 / body->getInvMass(), body);
+                        object->new_instance(world, t, 1.0 / body->getInvMass(), body);
 
-                                        objects.push_back(object);
-                                        return true;
-                                }
-                        }
-
+                        //objects.push_back(object);
+                        if (strcmp(name, mesh_map.at(name)->name) == 0)
+                                object_map[name] = object;
+                        else
+                                object_map[_copyName] = object;
+                        return true;
                 }
         }
-        return false;
+
+        //}
+        //}
+return false;
 }
 

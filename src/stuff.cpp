@@ -8,7 +8,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <memory>
 #include <vector>
-
+#include <fstream>
 #include <iostream>
 #include <stdio.h>
 
@@ -25,23 +25,15 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-
-#ifndef GL_GENERATE_MIPMAP
-#define GL_GENERATE_MIPMAP 0x8191
-#endif
-
-#ifndef GL_MULTISAMPLE
-#define GL_MULTISAMPLE 0x809D
-#endif
-
-#ifndef GL_SAMPLE_ALPHA_TO_COVERAGE
-#define GL_SAMPLE_ALPHA_TO_COVERAGE 0x809E
-#endif
+char* read_file(const char* filename);
+GLuint compile_shader(const char* vertex, const char* fragment);
 
 const float twopi = 6.28318530718;
 const float player_mass = 1.0;
 const glm::vec3 up(0,0,-1);
+
 int o = 0; 
+
 struct draw_opts
 {
         bool textured = true;
@@ -49,49 +41,39 @@ struct draw_opts
         btTransform camera;
 };
 
-// An array of 3 vectors which represents 3 vertices
-static const GLfloat g_vertex_buffer_data[] = {
-   1.0f, -.33f, 0.0f,
-   -1.0f, -.33f, 0.0f,
-   -1.0f, -1.f, 0.0f,
-   1.0f, -1.f, 0.0f,
-   1.0f, -.33f, 0.0f,
+class UI
+{
+        private:
+                const GLfloat ui_vertex_data[15] = {
+                        1.0f, -.33f, 0.0f,
+                        -1.0f, -.33f, 0.0f,
+                        -1.0f, -1.f, 0.0f,
+                        1.0f, -1.f, 0.0f,
+                        1.0f, -.33f, 0.0f,
+                };
+
+                GLuint vertexbuffer, shader;
+        public:
+                void setup()
+                {
+                        shader = compile_shader(read_file("src/ui.vs.glsl"), read_file("src/ui.fs.glsl"));
+                        glGenBuffers(1, &vertexbuffer);
+                        glBindBuffer(GL_ARRAY_BUFFER, vertexbuffer);
+                        glBufferData(GL_ARRAY_BUFFER, sizeof(ui_vertex_data), ui_vertex_data, GL_STATIC_DRAW);
+                }
+
+                void draw()
+                {
+                        glUseProgram(shader);
+                        glEnableVertexAttribArray(0);
+                        glBindBuffer(GL_ARRAY_BUFFER, vertexbuffer);
+                        glVertexAttribPointer( 0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+
+                        glDrawArrays(GL_TRIANGLE_STRIP, 0, 5);
+
+                        glDisableVertexAttribArray(0);
+                }
 };
-
-GLuint vertexbuffer, triangle_shader;
-void setup_triangle()
-{
-        // This will identify our vertex buffer
-
-        // Generate 1 buffer, put the resulting identifier in vertexbuffer
-        glGenBuffers(1, &vertexbuffer);
-
-        // The following commands will talk about our 'vertexbuffer' buffer
-        glBindBuffer(GL_ARRAY_BUFFER, vertexbuffer);
-
-        // Give our vertices to OpenGL.
-        glBufferData(GL_ARRAY_BUFFER, sizeof(g_vertex_buffer_data), g_vertex_buffer_data, GL_STATIC_DRAW);
-}
-
-void draw_triangle()
-{
-        // 1rst attribute buffer : vertices
-        glEnableVertexAttribArray(0);
-        glBindBuffer(GL_ARRAY_BUFFER, vertexbuffer);
-        glVertexAttribPointer(
-                        0,                  // attribute 0. No particular reason for 0, but must match the layout in the shader.
-                        3,                  // size
-                        GL_FLOAT,           // type
-                        GL_FALSE,           // normalized?
-                        0,                  // stride
-                        (void*)0            // array buffer offset
-                        );
-
-        // Draw the triangle !
-        glDrawArrays(GL_TRIANGLE_STRIP, 0, 5); // Starting from vertex 0; 3 vertices total -> 1 triangle
-
-        glDisableVertexAttribArray(0);
-}
 
 class Material
 {
@@ -127,6 +109,18 @@ class Mesh
                 bool hasTexture;
                 unsigned int texture;
 };
+
+struct Instance {
+        public:
+                Instance(const char *_name)
+                {
+                        strcpy(name, _name);
+                }
+                Instance() {};
+                float transform[16];
+                char name[256];
+};
+
 
 class Camera
 {
@@ -177,7 +171,7 @@ class Object
                         mesh = _mesh;
                 }
 
-                void new_instance(std::shared_ptr<btDiscreteDynamicsWorld> world, btTransform t, btScalar mass, btRigidBody *b)
+                Instance new_instance(std::shared_ptr<btDiscreteDynamicsWorld> world, btTransform t, btScalar mass, btRigidBody *b)
                 {
                         btMotionState* motion=new btDefaultMotionState(t);
                         btVector3 inertia(0,0,0);
@@ -190,8 +184,12 @@ class Object
                         body->setMotionState(motion);
                         //body->setActivationState(WANTS_DEACTIVATION);
 
+                        if (!b)
+                                world->addRigidBody(body);
                         body_instances.push_back(body);
-                        world->addRigidBody(body);
+                        Instance instance(name);
+                        t.getOpenGLMatrix(instance.transform);
+                        return instance;
                 }
 
                 ~Object()
@@ -318,24 +316,6 @@ void Mesh::init_buffer(GLuint activeShader)
 
 }
 
-struct Instance {
-        public:
-                Instance(const char *_name)
-                {
-                        strcpy(name, _name);
-                }
-                float transform[16];
-                char name[256];
-};
-
-void transposematrix(float m[16], aiMatrix4x4 *p)
-{
-        m[0] = p->a1; m[4] = p->a2; m[8] = p->a3; m[12] = p->a4;
-        m[1] = p->b1; m[5] = p->b2; m[9] = p->b3; m[13] = p->b4;
-        m[2] = p->c1; m[6] = p->c2; m[10] = p->c3; m[14] = p->c4;
-        m[3] = p->d1; m[7] = p->d2; m[11] = p->d3; m[15] = p->d4;
-}
-
 class Context
 {
         std::shared_ptr<btDiscreteDynamicsWorld> world;
@@ -352,6 +332,7 @@ class Context
         std::vector<Instance> instances;
 
         Object *player;
+        UI ui;
         glm::mat4 look, perspective;
 
         GLuint shader, grapple_shader;
@@ -391,12 +372,42 @@ class Context
                 {
                         aiMatrix4x4 _t = node->mTransformation * _transform;
                         Instance i(node->mName.data);
-                        transposematrix(i.transform, &_t);
+                        // Transpose and store node world transformation
+                        i.transform[0] = _t.a1; i.transform[4] = _t.a2; i.transform[8] = _t.a3; i.transform[12] = _t.a4;
+                        i.transform[1] = _t.b1; i.transform[5] = _t.b2; i.transform[9] = _t.b3; i.transform[13] = _t.b4;
+                        i.transform[2] = _t.c1; i.transform[6] = _t.c2; i.transform[10] = _t.c3; i.transform[14] = _t.c4;
+                        i.transform[3] = _t.d1; i.transform[7] = _t.d2; i.transform[11] = _t.d3; i.transform[15] = _t.d4;
                         for (int i = 0; i < node->mNumChildren; i++) {
                                 instancesFromGraph(node->mChildren[i], _t);
                         }
                         instances.push_back(i);
                 }
+        }
+        void instancesFromFile(const char *filename)
+        {
+                std::fstream file(filename,std::ios::binary|std::ios::in|std::ios::ate );
+                int size = file.tellg();
+                for(int i = 0; i<size/sizeof(Instance); i++)
+                { 
+                        Instance instance;
+                        file.seekg(i*sizeof(Instance));
+                        file.read(reinterpret_cast<char *>(&instance),sizeof(Instance));
+                        instances.push_back(instance);
+                        //cout<<p_Data.SiteName<<endl;
+                        //cout<<"Rank: "<< p_Data.Rank<<endl;
+                }
+                file.close();
+        }
+        void instancesToFile(const char *filename)
+        {
+                std::remove(filename);
+                std::fstream file(filename,std::ios::out|std::ios::binary|std::ios::app);
+                for (Instance i : instances)
+                {
+                        file.write(reinterpret_cast<char *>(&i),sizeof(Instance));
+                        printf("Wrote instance %s\n", i.name);
+                }
+                file.close();
         }
 
         void Init_SDL(void)
@@ -427,7 +438,6 @@ class Context
                 glewExperimental = GL_TRUE;
                 glewInit(); 
                 shader = compile_shader(read_file("src/standard.vert.glsl"), read_file("src/standard.frag.glsl"));
-                triangle_shader = compile_shader(read_file("src/ui.vs.glsl"), read_file("src/ui.fs.glsl"));
 
                 glUseProgram(shader);
                 glEnable(GL_BLEND);
@@ -446,7 +456,7 @@ class Context
                 world.reset(new btDiscreteDynamicsWorld(&*dispatcher,&*broadphase,&*solver,&*collisionConfig));
         }
 
-        void Load_Scene(const char *scene_file)
+        void Load_Scene(const char *scene_file, bool createInstances)
         {
                 Assimp::Importer importer;
                 const struct aiScene *scene = importer.ReadFile(scene_file, aiProcessPreset_TargetRealtime_Fast);
@@ -454,7 +464,8 @@ class Context
 
                 aiMatrix4x4 root_transform;
 
-                instancesFromGraph(scene->mRootNode, root_transform);
+                if (createInstances)
+                        instancesFromGraph(scene->mRootNode, root_transform);
 
                 AssetsFromScene(scene);
 
@@ -482,12 +493,16 @@ class Context
                                 btCollisionObject* obj = m_fileLoader->getRigidBodyByIndex(i);
                                 btRigidBody* body = btRigidBody::upcast(obj);      
                                 const char *name = m_fileLoader->getNameForPointer(body);
-                                if (body)
+                                if (body && name)
                                 {
                                         if (MatchBodyWithInstanceAndMesh(body, name) == false)
                                         {
                                                 printf("Failed to assign body %s\n", name);
                                                 exit(4);
+                                        }
+                                        else
+                                        {
+                                                printf("Added object %s\n", name);
                                         }
                                 }
 
@@ -514,7 +529,6 @@ class Context
                                         {
                                                 if (strcmp("Sky", m.name) == 0)
                                                 {
-                                                        printf("FOUND THE SKY\n");
                                                         float color[4] = { 1.0, 1.0, 1.0, 1.0 };
                                                         std::shared_ptr<Object> object(new Object("Sky", _b, &m, color));
                                                         object->new_instance(world, t, 1.0 / _b->getInvMass(), _b);
@@ -564,6 +578,38 @@ class Context
                         throw std::runtime_error("Failed to physics data");
                 }
         }
+
+        void serializeBullet()
+        {
+                btDefaultSerializer*	serializer = new btDefaultSerializer();
+                for (int i=0; i < world->getNumCollisionObjects(); i++)
+                {
+                        btCollisionObject* obj = world->getCollisionObjectArray()[i];
+                        btRigidBody* body = btRigidBody::upcast(obj);
+                        if (body && body->getMotionState())
+                        {
+                                for (std::shared_ptr<Object> object : objects)
+                                {
+                                        for (btRigidBody *instance : object->body_instances)
+                                        {
+                                                if (instance == body)
+                                                {
+                                                        printf("Serialized object %d %s\n", i, object->name);
+                                                        serializer->registerNameForPointer(obj, object->name);
+                                                }
+                                        }
+                                }
+                        }
+                }
+                world->serialize(serializer);
+
+                FILE* file = fopen("testFile.bullet","wb");
+                fwrite(serializer->getBufferPointer(),serializer->getCurrentBufferSize(),1, file);
+                fclose(file);
+                instancesToFile("testdata.dat");
+        }
+
+
         void CollisionRoutine(void);
 
         void FreezeInstances();
@@ -584,12 +630,14 @@ class Context
 
                 Init_Bullet();
 
-                setup_triangle();
+                ui.setup();
 
-                const char *scene = "assets/sandbox.fbx", *physics = "assets/sandbox.bullet";
                 // Note: Mesh needs to be -Y forward +Z up, 
                 // to align properly with collision shapes from Bullet
+                const char *scene = "assets/sandbox.fbx", *physics = "assets/sandbox.bullet";
+                //const char *scene = "assets/sandbox.fbx", *physics = "testFile.bullet";
 
+                // Save the target path to use when loading texture bitmaps
                 for (unsigned long i = 0, sep = 0; i < strlen(scene); i++)
                 {
                         if (scene[i] == '/')
@@ -601,7 +649,9 @@ class Context
                         }
                 }
 
-                Load_Scene(scene);
+                Load_Scene(scene, true);
+
+                //instancesFromFile("testdata.dat");
 
                 Load_World(physics);
         }
@@ -853,8 +903,7 @@ void Context::Draw()
                 object->draw_buffer(opt);
         }
 
-        glUseProgram(triangle_shader);
-        draw_triangle();
+        ui.draw();
 
         //glDisable(GL_CULL_FACE);
         glDisable(GL_TEXTURE_2D);
@@ -882,7 +931,8 @@ void Context::PollInput()
                                         t.setOrigin(btVector3(round(t.getOrigin().x()),round(t.getOrigin().y()), round(t.getOrigin().z())));
                                         //glm::vec3 eye = glm::vec3(origin.x(), origin.y(), origin.z());
                                         //t.setFromOpenGLMatrix(objects[o]->transform);
-                                        objects[o]->new_instance(world, t, 0.0, NULL);
+                                        Instance instance = objects[o]->new_instance(world, t, 0.0, NULL);
+                                        instances.push_back(instance);
                                         //printf("WEE MOUSEWHEEL %d\n", event.motion.x);
                                         /*
                                            for (auto o : objects) {
@@ -961,7 +1011,8 @@ void Context::PollInput()
                                         }
                                         if (keystate[SDL_SCANCODE_O])
                                         {
-                                                FreezeInstances();
+                                                serializeBullet();
+                                                //FreezeInstances();
                                         }
                                         if (keystate[SDL_SCANCODE_SPACE])
                                         {
@@ -1023,13 +1074,11 @@ void Context::UpdatePosition()
         {
                 btTransform t;
                 player->body->getMotionState()->getWorldTransform(t);
-                //                if (player_grounded)
                 player->body->applyForce(btVector3(velocity.x() * -25, velocity.y() * -25, 0),t.getOrigin());
         }
         else
         {
                 const btVector3 normalized = _v.normalized();
-                //if (player_grounded)
                 velocity = btVector3(normalized.x() * walkspeed, normalized.y() * walkspeed, velocity.z());
         }
         if (input[LEFT_CLICK])
@@ -1121,16 +1170,6 @@ void Context::Loop()
         {
                 tick = SDL_GetTicks();
                 world->stepSimulation(1/60.0);
-                for (std::shared_ptr<Object> o : objects)
-                {
-                        if (strcmp(o->name, "ui_cube") == 0)
-                        {
-                                btTransform t;
-                                player->body->getMotionState()->getWorldTransform(t);
-                                o->body->setWorldTransform(t);
-                                printf("GOT CUBE!#\n");
-                        }
-                }
                 CollisionRoutine();
                 PollInput();
                 UpdatePosition();
@@ -1185,10 +1224,6 @@ int main( int argc, char *argv[] )
         return 0;
 }
 
-
-
-void renderSphere(btRigidBody* sphere);
-
 btRigidBody *Context::FirstCollisionRayTrace(int x, int y)
 {
         glm::vec4 ray_start_NDC( ((float)x/(float)width  - 0.5f) * 2.0f, ((float)y/(float)height - 0.5f) * 2.0f, -1.0, 1.0f);
@@ -1235,8 +1270,6 @@ void Object::draw_buffer(struct draw_opts opt)
 {
         if (mesh)
         {
-                //btQuaternion rot = t.getRotation();
-                //printf("Orientation %f %f %f\n", rot.x(), rot.y(), rot.z());
                 glBindVertexArray (mesh->vao);
                 glUniform4f (glGetUniformLocation(mesh->shader, "color"), (GLfloat) rgba[0], (GLfloat) rgba[1], (GLfloat) rgba[2], (GLfloat) rgba[3]);
                 glUniform3f(glGetUniformLocation (mesh->shader, "light.position"), 10000, 10, 1000000);

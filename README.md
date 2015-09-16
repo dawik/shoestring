@@ -31,7 +31,11 @@ Premake 4
 $ ./build_deps.sh
 ```
 
-(optional) Third:
 ```sh
-$ make run
+$ make
 ```
+
+```sh
+$ ./run.sh
+```
+

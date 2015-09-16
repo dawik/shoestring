@@ -9,6 +9,8 @@
   - Model loading via assimp
   - First person camera
   - In-game level editing
+  - Grapple hook
+  - Darth vader style object manipulation
 
 ### Roadmap
    - Graphical UI

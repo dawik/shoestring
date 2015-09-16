@@ -2,7 +2,7 @@
 
 uniform struct Light {
    vec3 position;
-   vec3 intensities; //a.k.a the color of the light
+   vec3 intensities;
    float attenuation;
    float ambientCoefficient;
 } light;
@@ -53,7 +53,7 @@ void main()
     float attenuation = 1.0 / (1.0 + light.attenuation * pow(distanceToLight, 2));
 
     //linear color (color before gamma correction)
-    //vec3 linearColor = ambient + attenuation*(diffuse + specular); // Specular broken
+    //vec3 linearColor = ambient + attenuation*(diffuse + specular); // Specular buggy
     vec3 linearColor = ambient + attenuation*(diffuse);
     
     //final color (after gamma correction)

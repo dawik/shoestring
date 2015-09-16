@@ -1,4 +1,5 @@
 #!/bin/bash 
+# Quick and dirty script to build dependencies
 
 git submodule update --init --recursive
 cd bullet3/build3
@@ -12,9 +13,5 @@ rename _gmake_x64_release '' *.a
 echo "Bullet built"
 
 cd ../../assimp
-cmake -G 'Unix Makefiles'
-make
-
-cd ../freetype-gl
 cmake -G 'Unix Makefiles'
 make

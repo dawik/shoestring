@@ -1254,7 +1254,8 @@ class Context
 
                 Load_World(physics);
 
-                instancesFromFile("testdata.dat");
+                instancesFromFile("instances.dat");
+
                 for(Instance &i : instances)
                 {
                         btTransform t;

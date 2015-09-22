@@ -26,8 +26,6 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-#include "scene.h"
-
 using namespace std;
 
 char* read_file(const char* filename);
@@ -112,13 +110,13 @@ class Mesh
                 ~Mesh() {
                 };
 
-                void init(GLuint activeShader)
-                        : shader(activeShader)
+                void init(GLuint _shader)
                 {
+                        shader = _shader;
                         size_t stride = hasTexture ? sizeof(float) * 8 : sizeof(float) * 6;
-                        GLint vertexAttrib = glGetAttribLocation (activeShader, "vertex");
-                        GLint normalAttrib = glGetAttribLocation (activeShader, "normal");
-                        GLint uvAttrib = glGetAttribLocation (activeShader, "uv");
+                        GLint vertexAttrib = glGetAttribLocation (shader, "vertex");
+                        GLint normalAttrib = glGetAttribLocation (shader, "normal");
+                        GLint uvAttrib = glGetAttribLocation (shader, "uv");
                         glGenBuffers (1, &vbo);
                         glBindBuffer (GL_ARRAY_BUFFER, vbo);
                         glBufferData (GL_ARRAY_BUFFER, sizeof (float) * vertexdata.size(), &vertexdata[0], GL_STREAM_DRAW);
@@ -357,7 +355,6 @@ static void compile_shader_src(GLuint shader, const char* src)
 
 GLuint compile_shader(const char* vertex, const char* fragment)
 {
-        // Attempts to compile and link., links and returns a 
         GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
         GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
         GLuint programShader = glCreateProgram();
@@ -854,7 +851,6 @@ class Context
                 {
                         printf("Mesh %s has bones\n", _mesh->mName.C_Str());
                 }
-                //meshes.push_back(mesh);
         };
 
         void AddMaterial(const struct aiMaterial *_material)
@@ -889,21 +885,10 @@ class Context
                         material.texture = -1;
                 aiString _n;
                 _material->Get(AI_MATKEY_NAME, _n);
-                material.name = string(_n.data);
                 _material->Get(AI_MATKEY_COLOR_DIFFUSE,material.diffuse);
                 _material->Get(AI_MATKEY_COLOR_SPECULAR,material.specular);
-                aiColor3D color (0.f,0.f,0.f);
-                _material->Get(AI_MATKEY_COLOR_DIFFUSE,color);
-                material.diffuse[0] = color.r;
-                material.diffuse[1] = color.g;
-                material.diffuse[2] = color.b;
-                material.diffuse[3] = 1.0;
-                _material->Get(AI_MATKEY_COLOR_SPECULAR,color);
-                material.specular[0] = color.r;
-                material.specular[1] = color.g;
-                material.specular[2] = color.b;
-                material.specular[3] = 1.0;
                 _material->Get(AI_MATKEY_SHININESS,material.shininess);
+                material.name = string(_n.data);
                 materials.push_back(material);
         }
 
@@ -1166,7 +1151,6 @@ class Context
                 {
                         if (held_object)
                         {
-                                //held_object->setGravity(btVector3(0,0,0));
                                 actor->body->getMotionState()->getWorldTransform(actor_transform);
                                 held_object->getMotionState()->getWorldTransform(object_transform);
                                 btVector3 summon_to(forward.x, forward.y, forward.z);
@@ -1179,10 +1163,10 @@ class Context
                 {
                         if (held_object)
                         {
-                                //held_object->setGravity(btVector3(0,0,-9.82));
                                 btVector3 direction(forward.x, forward.y, forward.z);
                                 direction.normalize();
-                                held_object->setLinearVelocity(direction * 20.0);
+                                const float throwVelocity = 40.f;
+                                held_object->setLinearVelocity(direction * throwVelocity);
                                 held_object = NULL;
                         }
                 }
@@ -1285,24 +1269,6 @@ class Context
                         }
                 }
         }
-        ~Context()
-        {
-                delete actor;
-
-                for (int i=world->getNumCollisionObjects()-1; i>=0 ;i--)
-                {
-                        btCollisionObject* obj = world->getCollisionObjectArray()[i];
-                        btRigidBody* body = btRigidBody::upcast(obj);
-                        if (body && body->getMotionState())
-                        {
-                                delete body->getMotionState();
-                        }
-                        world->removeCollisionObject( obj );
-                        delete obj;
-                }
-                SDL_Quit();
-        }
-
         void Loop()
         {
                 unsigned int tick;
@@ -1347,6 +1313,25 @@ class Context
                         }
                 }
         }
+
+        ~Context()
+        {
+                delete actor;
+
+                for (int i=world->getNumCollisionObjects()-1; i>=0 ;i--)
+                {
+                        btCollisionObject* obj = world->getCollisionObjectArray()[i];
+                        btRigidBody* body = btRigidBody::upcast(obj);
+                        if (body && body->getMotionState())
+                        {
+                                delete body->getMotionState();
+                        }
+                        world->removeCollisionObject( obj );
+                        delete obj;
+                }
+                SDL_Quit();
+        }
+
 };
 
 int main( int argc, char *argv[] )

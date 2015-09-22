@@ -9,7 +9,7 @@ uniform struct Light {
 
 uniform mat4 model;
 uniform mat4 camera;
-uniform mat4 perspective;
+uniform mat4 projection;
 uniform vec4 color;
 uniform int texid;
 uniform int isHighlighted;

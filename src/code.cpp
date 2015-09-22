@@ -26,6 +26,10 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
+#include "scene.h"
+
+using namespace std;
+
 char* read_file(const char* filename);
 GLuint compile_shader(const char* vertex, const char* fragment);
 void gl_error();
@@ -59,7 +63,7 @@ class UI
 
                 GLuint vertexbuffer, shader;
         public:
-                void setup()
+                void init()
                 {
                         shader = compile_shader(read_file("src/ui.vs"), read_file("src/ui.fs"));
                         glGenBuffers(1, &vertexbuffer);
@@ -83,9 +87,9 @@ class UI
 class Material
 {
         public:
-                char name[128];
+                string name;
                 int texture;
-                char bitmap_file[256];
+                string bitmap_file;
                 float shininess = 0.1;
                 float diffuse[4] = {1,1,1,1};
                 float specular[4] = {1,1,1,1};
@@ -94,11 +98,11 @@ class Material
 class Mesh
 {
         public:
-                std::vector<float> vertexdata;
-                std::vector<unsigned int> elements;
+                vector<float> vertexdata;
+                vector<unsigned int> elements;
                 unsigned int numElements, vao, vbo, ebo, material_idx;
                 GLuint shader;
-                char name[128];
+                string name;
                 bool hasTexture;
                 unsigned int texture;
                 Mesh() {
@@ -109,8 +113,8 @@ class Mesh
                 };
 
                 void init(GLuint activeShader)
+                        : shader(activeShader)
                 {
-                        shader = activeShader;
                         size_t stride = hasTexture ? sizeof(float) * 8 : sizeof(float) * 6;
                         GLint vertexAttrib = glGetAttribLocation (activeShader, "vertex");
                         GLint normalAttrib = glGetAttribLocation (activeShader, "normal");
@@ -146,56 +150,71 @@ class Mesh
 struct Instance {
         public:
                 Instance(const char *_name)
+                        : name(string(_name))
                 {
-                        strcpy(name, _name);
+                }
+                Instance(string _name)
+                        : name(_name)
+                {
                 }
                 Instance() {};
                 float transform[16];
-                char name[256];
+                string name;
 };
 
 
 class Camera
 {
         public:
-                char name[256];
-                float fov;
-                float near;
-                float far;
-                float aspect;
-                glm::mat4 world;
+                Camera(string _name, 
+                                float _fov, 
+                                float _near, 
+                                float _far, 
+                                float _aspect)
+                        : name(_name),
+                        fov(_fov),
+                        near(_near),
+                        far(_far),
+                        aspect(_aspect) {}
+                Camera() {};
+                string name = "Camera";
+                float fov = 49.134342;
+                float near = 0.01;
+                float far = 10000.f;
+                float aspect = 1.77778;
+                glm::mat4 world = glm::mat4(1.0);
 };
 
 class Object
 {
         public:
-                char name[128];
+                string name;
                 float tint[4];
                 float transform[16];
                 btCollisionShape *shape;
                 btRigidBody *body;
-                std::vector<btRigidBody*> bodies;
-                std::shared_ptr<Mesh> mesh;
+                vector<btRigidBody*> bodies;
+                shared_ptr<Mesh> mesh;
 
-                Object(const char *_name, btRigidBody* _body, std::shared_ptr<Mesh>_mesh)
+                Object(const char *_name, btRigidBody* _body, shared_ptr<Mesh>_mesh)
                 {
                         tint[0] = 1.0;
                         tint[1] = 1.0;
                         tint[2] = 1.0;
                         tint[3] = 1.0;
-                        strncpy(name, _name, 128);
+                        name = string(_name);
                         shape = _body->getCollisionShape();
                         body = _body;
                         mesh = _mesh;
                 }
 
-                Object(const char *_name, btRigidBody* _body, std::shared_ptr<Mesh> _mesh, float _tint[4])
+                Object(const char *_name, btRigidBody* _body, shared_ptr<Mesh> _mesh, float _tint[4])
                 {
                         tint[0] = _tint[0];
                         tint[1] = _tint[1];
                         tint[2] = _tint[2];
                         tint[3] = _tint[3];
-                        strncpy(name, _name, 128);
+                        name = string(_name);
                         shape = _body->getCollisionShape();
                         body = _body;
                         mesh = _mesh;
@@ -210,7 +229,7 @@ class Object
                         }
                 };
 
-                Instance new_instance(std::shared_ptr<btDiscreteDynamicsWorld> world, btTransform t, btScalar mass, btRigidBody *b)
+                Instance new_instance(shared_ptr<btDiscreteDynamicsWorld> world, btTransform t, btScalar mass, btRigidBody *b)
                 {
                         btMotionState* motion=new btDefaultMotionState(t);
                         btVector3 inertia(0,0,0);
@@ -243,7 +262,7 @@ class Object
                                 glUniform4f (glGetUniformLocation(mesh->shader, "color"), (GLfloat) tint[0], (GLfloat) tint[1], (GLfloat) tint[2], (GLfloat) tint[3]);
                                 glUniform3f(glGetUniformLocation (mesh->shader, "light.position"), 10000, 10, 1000000);
                                 glUniform3f(glGetUniformLocation (mesh->shader, "light.intensities"), material->diffuse[0],material->diffuse[0],material->diffuse[0]); 
-                                glUniform1i(glGetUniformLocation (mesh->shader, "sky"), strcmp(name, "Sky"));
+                                glUniform1i(glGetUniformLocation (mesh->shader, "sky"), name == "Sky");
                                 GLint texid = mesh->hasTexture ? mesh->texture : -1;
                                 glUniform1i(glGetUniformLocation (mesh->shader, "texid"), texid);
                                 glUniform1i(glGetUniformLocation (mesh->shader, "isHighlighted"), 0);
@@ -270,7 +289,7 @@ class Object
 
                                         glUniformMatrix4fv (glGetUniformLocation (mesh->shader, "model"), 1, GL_FALSE, mat);
 
-                                        if (strcmp(name, "Sky") == 0)
+                                        if (name == "Sky")
                                         {
                                                 glDisable(GL_CULL_FACE);
                                         }
@@ -280,7 +299,7 @@ class Object
                                                         GL_UNSIGNED_INT,
                                                         (void*)0
                                                       );
-                                        if (strcmp(name, "Sky") == 0)
+                                        if (name == "Sky" == 0)
                                         {
                                                 glEnable(GL_CULL_FACE);
                                         }
@@ -302,7 +321,7 @@ class Object
                                 }
                                 glBindVertexArray (0);
                         } else {
-                                printf("No mesh for %s\n", name); 
+                                printf("No mesh for %s\n", name.c_str()); 
                         }
                 };
 };
@@ -313,7 +332,7 @@ void gl_error()
         if (error != GL_NO_ERROR)
         {
                 printf("\nglError 0x%04X\n", error);
-                throw std::runtime_error("GL error");
+                throw runtime_error("GL error");
         }
 }
 
@@ -331,7 +350,7 @@ static void compile_shader_src(GLuint shader, const char* src)
         glGetShaderInfoLog(shader, 4096, &length, log);
         if(status == GL_FALSE) {
                 fprintf(stderr, "compile failed %s\n", log);
-                throw std::runtime_error("GLSL Compilation error");
+                throw runtime_error("GLSL Compilation error");
         }
 }
 
@@ -389,18 +408,18 @@ char* read_file(const char* filename)
 
 class Context
 {
-        std::shared_ptr<btDiscreteDynamicsWorld> world;
-        std::shared_ptr<btCollisionDispatcher> dispatcher;
-        std::shared_ptr<btCollisionConfiguration> collisionConfig;
-        std::shared_ptr<btDbvtBroadphase> broadphase;
-        std::shared_ptr<btSequentialImpulseConstraintSolver> solver;
-        std::vector<std::shared_ptr<Object>> objects;
-        std::vector<Material> materials;
-        std::vector<Camera> cameras;
-        std::unordered_map<std::string, std::shared_ptr<Object>> object_map;
-        std::unordered_map<std::string, std::shared_ptr<Mesh>> mesh_map;
+        shared_ptr<btDiscreteDynamicsWorld> world;
+        shared_ptr<btCollisionDispatcher> dispatcher;
+        shared_ptr<btCollisionConfiguration> collisionConfig;
+        shared_ptr<btDbvtBroadphase> broadphase;
+        shared_ptr<btSequentialImpulseConstraintSolver> solver;
+        vector<shared_ptr<Object>> objects;
+        vector<Material> materials;
+        vector<Camera> cameras;
+        unordered_map<string, shared_ptr<Object>> object_map;
+        unordered_map<string, shared_ptr<Mesh>> mesh_map;
 
-        std::vector<Instance> instances;
+        vector<Instance> instances;
 
         Object *actor;
         UI ui;
@@ -414,7 +433,7 @@ class Context
         int input[8];
 
         int current_object_idx = 0; 
-        std::shared_ptr<Object> current_object;
+        shared_ptr<Object> current_object;
 
         char path[256];
         float pitch; 
@@ -496,7 +515,7 @@ class Context
         }
         void instancesFromFile(const char *filename)
         {
-                std::fstream file(filename,std::ios::binary|std::ios::in|std::ios::ate );
+                fstream file(filename,ios::binary|ios::in|ios::ate );
                 if (file.is_open())
                 {
                         int size = file.tellg();
@@ -513,12 +532,12 @@ class Context
         }
         void instancesToFile(const char *filename)
         {
-                std::remove(filename);
-                std::fstream file(filename,std::ios::out|std::ios::binary|std::ios::app);
+                remove(filename);
+                fstream file(filename,ios::out|ios::binary|ios::app);
                 for (Instance i : instances)
                 {
                         file.write(reinterpret_cast<char *>(&i),sizeof(Instance));
-                        printf("Wrote instance %s\n", i.name);
+                        printf("Wrote instance %s\n", i.name.c_str());
                 }
                 file.close();
         }
@@ -610,11 +629,11 @@ class Context
                                         char _copyName[256];
                                         strcpy(_copyName, name);
                                         _copyName[strlen(name) - 4] = '\0';
-                                        if (strcmp(name, mesh_map.at(name)->name) == 0 || strcmp(_copyName, mesh_map.at(name)->name) == 0)
+                                        if (string(name) == mesh_map.at(name)->name || string(_copyName) == mesh_map.at(name)->name)
                                         {
                                                 float random_color[4] = { (float) rand() / RAND_MAX, (float) rand() / RAND_MAX, (float) rand() / RAND_MAX, 1.0 };
-                                                std::shared_ptr<Object> object(new Object(name, body, mesh_map.at(name), random_color));
-                                                if (strcmp(name, mesh_map.at(name)->name) == 0)
+                                                shared_ptr<Object> object(new Object(name, body, mesh_map.at(name), random_color));
+                                                if (string(name) == mesh_map.at(name)->name)
                                                 {
                                                         object_map[name] = object;
                                                         printf("Added object %s\n", name);
@@ -646,21 +665,21 @@ class Context
                                 {
                                         object_map[i.name]->new_instance(world, t, 1.0 / object_map[i.name]->body->getInvMass(), object_map[i.name]->body);
                                         //object_map[i.name]->new_instance(world, t, 1.0 / object_map[i.name]->body->getInvMass(), NULL);
-                                        printf("Added instance %s\n", i.name);
+                                        printf("Added instance %s\n", i.name.c_str());
                                 }
                         }
 
                         instances.clear();
 
-                        if (cameras.size())
                         {
-                                Camera cam = cameras.at(0);
+                                Camera cam = cameras.size() ? cameras.at(0) : Camera();
                                 pitch = twopi;
                                 yaw = twopi;
                                 fov = cam.fov;
                                 aspect = cam.aspect;
-                                near = 0.01;
-                                far = 10000.0;
+                                printf("fov %f\n", fov);
+                                near = cam.near;
+                                far = cam.far;
 
                                 float actor_height = 2.0;
                                 float actor_radius = 2.0;
@@ -690,7 +709,7 @@ class Context
                 }
                 else 
                 {
-                        throw std::runtime_error("Failed to physics data");
+                        throw runtime_error("Failed to physics data");
                 }
         }
 
@@ -698,7 +717,7 @@ class Context
         {
                 for (auto &obj : object_map)
                 {
-                        for(std::vector<btRigidBody*>::iterator it = obj.second->bodies.begin() + 1; 
+                        for(vector<btRigidBody*>::iterator it = obj.second->bodies.begin() + 1; 
                                         it != obj.second->bodies.end(); ++it) 
                         {
                                 world->removeRigidBody(*it);
@@ -718,14 +737,14 @@ class Context
                         btRigidBody* body = btRigidBody::upcast(obj);
                         if (body && body->getMotionState())
                         {
-                                for (std::shared_ptr<Object> object : objects)
+                                for (shared_ptr<Object> object : objects)
                                 {
                                         for (btRigidBody *instance : object->bodies)
                                         {
                                                 if (instance == body)
                                                 {
-                                                        printf("Serialized object %d %s\n", i, object->name);
-                                                        serializer->registerNameForPointer(obj, object->name);
+                                                        printf("Serialized object %d %s\n", i, object->name.c_str());
+                                                        serializer->registerNameForPointer(obj, object->name.c_str());
                                                 }
                                         }
                                 }
@@ -792,8 +811,8 @@ class Context
 
         void AddMesh(const aiMesh *_mesh)
         {
-                std::shared_ptr<Mesh> mesh(new Mesh());
-                strcpy(mesh->name, _mesh->mName.C_Str());
+                shared_ptr<Mesh> mesh(new Mesh());
+                mesh->name = string(_mesh->mName.C_Str());
                 mesh->numElements = _mesh->mNumFaces * 3;
                 for (unsigned int j = 0; j < _mesh->mNumVertices; j++)
                 {
@@ -829,7 +848,12 @@ class Context
                         mesh->texture = materials.at(_mesh->mMaterialIndex).texture;
                 }
 
-                mesh_map[std::string(_mesh->mName.C_Str())] = mesh;
+                mesh_map[string(_mesh->mName.C_Str())] = mesh;
+
+                if (_mesh->HasBones())
+                {
+                        printf("Mesh %s has bones\n", _mesh->mName.C_Str());
+                }
                 //meshes.push_back(mesh);
         };
 
@@ -845,11 +869,11 @@ class Context
                         if (!s) s = str.data; else s++;
                         strcpy(filename, path);
                         strcat(filename, str.data);
-                        strcpy(material.bitmap_file, filename);
+                        material.bitmap_file = string(filename);
                         bool duplicateTexture = false;
                         for(Material &m : materials)
                         {
-                                if (strcmp(filename, m.bitmap_file) == 0)
+                                if (strcmp(filename, m.bitmap_file.c_str()) == 0)
                                 {
                                         material.texture = m.texture;
                                         duplicateTexture = true;
@@ -865,7 +889,7 @@ class Context
                         material.texture = -1;
                 aiString _n;
                 _material->Get(AI_MATKEY_NAME, _n);
-                strcpy(material.name, _n.data);
+                material.name = string(_n.data);
                 _material->Get(AI_MATKEY_COLOR_DIFFUSE,material.diffuse);
                 _material->Get(AI_MATKEY_COLOR_SPECULAR,material.specular);
                 aiColor3D color (0.f,0.f,0.f);
@@ -897,15 +921,13 @@ class Context
                         AddMesh(scene->mMeshes[i]);
                 }
 
-
                 for (unsigned int i = 0; i < scene->mNumCameras; i++)
                 {
-                        Camera camera;
-                        camera.fov = scene->mCameras[i]->mHorizontalFOV * 57.2957795;
-                        camera.near = scene->mCameras[i]->mClipPlaneNear;
-                        camera.far = scene->mCameras[i]->mClipPlaneFar;
-                        camera.aspect = scene->mCameras[i]->mAspect;
-                        strcpy(camera.name, scene->mCameras[i]->mName.C_Str());
+                        Camera camera(string(scene->mCameras[i]->mName.C_Str()),
+                                        scene->mCameras[i]->mHorizontalFOV * 57.2957795,
+                                        scene->mCameras[i]->mClipPlaneNear,
+                                        scene->mCameras[i]->mClipPlaneFar,
+                                        scene->mCameras[i]->mAspect);
                         struct aiNode *node = findnode(scene->mRootNode, scene->mCameras[i]->mName.C_Str());
                         if (node)
                         {
@@ -921,7 +943,7 @@ class Context
 
         void FreezeInstances()
         {
-                for (std::shared_ptr<Object> object : objects)
+                for (shared_ptr<Object> object : objects)
                 {
                         for (btRigidBody *instance : object->bodies)
                         {
@@ -1096,7 +1118,7 @@ class Context
                                                 input[RIGHT] = keystate[SDL_SCANCODE_D] ? 1 : 0;
                                                 input[LEFT] = keystate[SDL_SCANCODE_A] ? 1 : 0;
                                                 if (keystate[SDL_SCANCODE_ESCAPE] || keystate[SDL_SCANCODE_Q])
-                                                        throw std::logic_error("User quit");
+                                                        throw logic_error("User quit");
                                                 break;
                                         }
                                 case SDL_QUIT:
@@ -1208,9 +1230,9 @@ class Context
                                 btManifoldPoint& pt = contactManifold->getContactPoint(j);
                                 if (pt.getDistance()<0.f)
                                 {
-                                           //const btVector3& ptA = pt.getPositionWorldOnA();
-                                           //const btVector3& ptB = pt.getPositionWorldOnB();
-                                           //const btVector3& normalOnB = pt.m_normalWorldOnB;
+                                        //const btVector3& ptA = pt.getPositionWorldOnA();
+                                        //const btVector3& ptB = pt.getPositionWorldOnB();
+                                        //const btVector3& normalOnB = pt.m_normalWorldOnB;
                                 }
                         }
                 }
@@ -1219,11 +1241,6 @@ class Context
         public: 
         Context(int argc, char **)
         {
-                if (argc != 1)
-                {
-                        throw std::invalid_argument("No command line interface yet\n");
-                } 
-
                 srand(time(NULL));
 
                 Init_SDL();
@@ -1232,7 +1249,7 @@ class Context
 
                 Init_Bullet();
 
-                ui.setup();
+                ui.init();
 
                 // Note: Mesh needs to be -Y forward +Z up, 
                 // to align properly with collision shapes from Bullet
@@ -1264,7 +1281,7 @@ class Context
                         if (object_map.count(i.name))
                         {
                                 object_map[i.name]->new_instance(world, t, 1.0 / object_map[i.name]->body->getInvMass(), NULL);
-                                printf("Added instance %s\n", i.name);
+                                printf("Added instance %s\n", i.name.c_str());
                         }
                 }
         }
@@ -1339,7 +1356,7 @@ int main( int argc, char *argv[] )
                 Context *ctx = new Context(argc, argv);
                 ctx->Loop();
         }
-        catch (std::exception &e)
+        catch (exception &e)
         {
                 printf("%s\n", e.what());
         }

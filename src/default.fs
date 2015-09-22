@@ -63,7 +63,7 @@ void main()
 
     const float crossRadius = 0.003;
     float d = sqrt(pow(tv.x/tv.z, 2) + pow(tv.y/tv.z, 2));
-    if (sky == 0)
+    if (sky != 0)
     {
             finalColor = surfaceColor;
             finalColor.rgb * gamma;

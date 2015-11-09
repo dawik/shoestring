@@ -297,8 +297,6 @@ class Object
 class Context
 {
         private:
-                char assetPath[256];
-
                 shared_ptr<btDiscreteDynamicsWorld> world;
                 shared_ptr<btCollisionDispatcher> dispatcher;
                 shared_ptr<btCollisionConfiguration> collisionConfig;
@@ -698,14 +696,14 @@ class Context
                 void AddMaterial(const struct aiMaterial *AIMaterial)
                 {
                         Material material;
-                        char filename[2000];
+                        char filename[2000] = "";
                         struct aiString str;
                         if (!aiGetMaterialString(AIMaterial, AI_MATKEY_TEXTURE_DIFFUSE(0), &str)) 
                         {
                                 char *s = strrchr(str.data, '/');
                                 if (!s) s = strrchr(str.data, '\\');
                                 if (!s) s = str.data; else s++;
-                                strcpy(filename, assetPath);
+                                strcpy(filename, "assets/");
                                 strcat(filename, str.data);
                                 material.bitmap_file = string(filename);
                                 bool duplicateTexture = false;
@@ -1083,18 +1081,6 @@ class Context
                         Init_Bullet();
 
                         const char *scene = "assets/sandbox.fbx", *physics = "assets/sandbox.bullet";
-
-                        // Save the path to use when loading textures
-                        for (unsigned long i = 0, sep = 0; i < strlen(scene); i++)
-                        {
-                                if (scene[i] == '/')
-                                        sep = i;
-                                if (i == strlen(scene) - 1)
-                                {
-                                        sep = sep ? sep + 1 : 0;
-                                        strncat(assetPath, scene, sizeof(char) * (sep));
-                                }
-                        }
 
                         Load_Scene(scene);
 

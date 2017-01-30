@@ -1,6 +1,7 @@
 #define NO_SDL_GLEXT
 #include <GL/glew.h>
 #include <GL/gl.h>
+
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -24,9 +25,7 @@
 #include "glstuff.h"
 
 /*****************************************************************************************
- * Important notice:                                                                     *
- * In order for meshes to align with collision shapes vertex data to be -Y forward +Z up *
- * Use the blender exporter                                                              *
+ * Orthodox C++                                                                          *
  ****************************************************************************************/
 
 using namespace std;
@@ -137,6 +136,7 @@ class Camera
         friend Context;
         private:
         string name = "Camera";
+  
         float fov = 49.134342;
         float near = 0.01;
         float far = 10000.f;
@@ -164,7 +164,6 @@ class Object
         private:
         string name;
         float tint[4];
-        float transform[16];
         btCollisionShape *shape;
         btRigidBody *body;
         vector<btRigidBody*> bodies;
@@ -196,6 +195,7 @@ class Object
                 tint[3] =_tint[3];
                 shape = _body->getCollisionShape();
         }
+
 
         ~Object()
         {
@@ -241,8 +241,7 @@ class Object
                         glUniform3f(glGetUniformLocation (mesh->shader, "light.position"), 10000, 10, 1000000);
                         glUniform3f(glGetUniformLocation (mesh->shader, "light.intensities"), material->diffuse[0],material->diffuse[0],material->diffuse[0]); 
                         glUniform1i(glGetUniformLocation (mesh->shader, "sky"), name == "Sky");
-                        GLint texid = mesh->hasTexture ? mesh->texture : -1;
-                        glUniform1i(glGetUniformLocation (mesh->shader, "texid"), texid);
+                        glUniform1i(glGetUniformLocation (mesh->shader, "texid"), mesh->hasTexture ? mesh->texture : 0);
                         glUniform1i(glGetUniformLocation (mesh->shader, "isHighlighted"), 0);
                         glUniform1f(glGetUniformLocation (mesh->shader, "light.ambientCoefficient"), 0.01);
                         glUniform1f(glGetUniformLocation (mesh->shader, "materialShininess"), material->shininess);
@@ -297,6 +296,9 @@ class Object
 class Context
 {
         private:
+                const char *scene_file = "assets/sandbox.fbx", *bullet_file = "assets/sandbox.bullet";
+                btBulletWorldImporter*		m_fileLoader;
+                Assimp::Importer importer;
                 shared_ptr<btDiscreteDynamicsWorld> world;
                 shared_ptr<btCollisionDispatcher> dispatcher;
                 shared_ptr<btCollisionConfiguration> collisionConfig;
@@ -318,7 +320,7 @@ class Context
                 int videoMode;
 
                 Object *player;
-                float mouseSensitivity = 0.001;
+                float mouseSensitivity = 0.005;
                 float playerPitch; 
                 float playerYaw;
                 //bool player_grounded = false;
@@ -337,6 +339,7 @@ class Context
                 vec3 eye, forward;
 
                 GLuint staticShader;
+                unsigned int tick;
 
                 btRigidBody *RayTrace(int x, int y)
                 {
@@ -410,7 +413,7 @@ class Context
                                         ifs.read(reinterpret_cast<char *>(&instance),sizeof(Instance));
                                         addedInstances.push_back(instance);
                                 }
-                                printf("Loaded %lu instances from file\n", addedInstances.size());
+                                printf("Loaded %lu bodies from file\n", addedInstances.size());
                                 ifs.close();
                         }
                 }
@@ -426,12 +429,12 @@ class Context
                         ofs.close();
                 }
 
-                void Init_SDL(void)
+                void InitSDL(void)
                 {
                         SDL_Init( SDL_INIT_VIDEO );
                         SDL_SetRelativeMouseMode(SDL_TRUE);
                         SDL_ShowCursor(0);
-                        videoMode = 1;
+                        videoMode = 0;
 
                         if (SDL_GetDisplayMode(0, 0, &displayMode) != 0) {
                                 SDL_Log("SDL_GetDisplayMode failed: %s", SDL_GetError());
@@ -443,7 +446,7 @@ class Context
                         window = SDL_CreateWindow("Shoestring Game Engine", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, screenWidth, screenHeight, SDL_WINDOW_OPENGL | SDL_WINDOW_MAXIMIZED);
                 }
 
-                void Init_GL(void)
+                void InitGL(void)
                 {
                         SDL_GL_CreateContext(window);
                         glewExperimental = GL_TRUE;
@@ -457,7 +460,7 @@ class Context
                         gl_error();
                 }
 
-                void Init_Bullet()
+                void InitBullet(void)
                 {
                         collisionConfig.reset(new btDefaultCollisionConfiguration());
                         dispatcher.reset(new btCollisionDispatcher(&*collisionConfig));
@@ -466,9 +469,8 @@ class Context
                         world.reset(new btDiscreteDynamicsWorld(&*dispatcher,&*broadphase,&*solver,&*collisionConfig));
                 }
 
-                void Load_Scene(const char *scene_file)
+                void InitScene(void)
                 {
-                        Assimp::Importer importer;
                         const struct aiScene *scene = importer.ReadFile(scene_file, aiProcessPreset_TargetRealtime_Fast);
                         printf("Loading scene from %s\n\t%s\n", scene_file, importer.GetErrorString());
 
@@ -508,9 +510,8 @@ class Context
                         importer.FreeScene();
                 }
 
-                void Load_Physics(const char *bullet_file)
+                void InitPhysics(void)
                 {
-                        btBulletWorldImporter*		m_fileLoader;
                         m_fileLoader = new btBulletWorldImporter(&*world);
 
                         m_fileLoader->setVerboseMode(false);
@@ -565,12 +566,12 @@ class Context
                         }
                 }
 
-                void Populate_World()
+                void Bodies(void)
                 {
 
                         btTransform t;  
 
-                        //instancesFromFile("instances.dat");
+                        //instancesFromFile("bodies.dat");
 
                         for(Instance &i : addedInstances)
                         {
@@ -583,7 +584,6 @@ class Context
                                 }
                         }
 
-                        // Add and initialize player and projection
                         {
                                 Camera cam = cameras.size() ? cameras.at(0) : Camera();
 
@@ -616,7 +616,7 @@ class Context
 
                 }
 
-                void clearInstances()
+                void clearInstances(void)
                 {
                         for (auto &obj : objects)
                         {
@@ -627,7 +627,7 @@ class Context
                                 }
                                 obj.second->bodies.erase(obj.second->bodies.begin() + 1, obj.second->bodies.end());
                         }
-                        printf("Cleared instances, remaining bodies in world %d\n", world->getNumCollisionObjects());
+                        printf("Cleared bodies, remaining bodies in world %d\n", world->getNumCollisionObjects());
                         addedInstances.clear();
                 }
 
@@ -635,13 +635,12 @@ class Context
                 {
                         if (node)
                         {
-                                unsigned int i;
-                                if (!strcmp(name, node->mName.data))
-                                        return node;
-                                for (i = 0; i < node->mNumChildren; i++) {
-                                        struct aiNode *found = findnode(node->mChildren[i], name);
-                                        if (found)
-                                                return found;
+                          if (!strcmp(name, node->mName.data))
+                            return node;
+                          for (struct { unsigned int i; struct aiNode *found; } it = { 0, NULL }; it.i < node->mNumChildren; it.i++) {
+                                        it.found = findnode(node->mChildren[it.i], name);
+                                        if (it.found)
+                                                return it.found;
                                 }
                         }
                         return NULL;
@@ -828,11 +827,13 @@ class Context
                                                 {
                                                         case SDL_BUTTON_LEFT:
                                                                 {
+                                                                        printf("left\n");
                                                                         playerInput[LEFT_CLICK] = 1;
                                                                         break;
                                                                 }
                                                         case SDL_BUTTON_MIDDLE:
                                                                 {
+                                                                        printf("mjurr\n");
                                                                         playerInput[MIDDLE_CLICK] = 1;
                                                                         break;
                                                                 }
@@ -886,7 +887,10 @@ class Context
                                                         }
                                                         if (keystate[SDL_SCANCODE_O])
                                                         {
-                                                                instancesToFile("instances.dat");
+                                                                instancesToFile("bodies.dat");
+                                                        } 
+                                                        if (keystate[SDL_SCANCODE_Q]) {
+                                                                playerInput[MIDDLE_CLICK] = 1;
                                                         }
                                                         if (keystate[SDL_SCANCODE_SPACE])
                                                         {
@@ -906,11 +910,13 @@ class Context
                                                 }
                                         case SDL_KEYUP:
                                                 {
+
+                                                        playerInput[MIDDLE_CLICK] = keystate[SDL_SCANCODE_R] ? 1 : 0;
                                                         playerInput[FORWARD] = keystate[SDL_SCANCODE_W] ? 1 : 0;
                                                         playerInput[BACK] = keystate[SDL_SCANCODE_S] ? 1 : 0;
                                                         playerInput[RIGHT] = keystate[SDL_SCANCODE_D] ? 1 : 0;
                                                         playerInput[LEFT] = keystate[SDL_SCANCODE_A] ? 1 : 0;
-                                                        if (keystate[SDL_SCANCODE_ESCAPE] || keystate[SDL_SCANCODE_Q])
+                                                        if (keystate[SDL_SCANCODE_ESCAPE])
                                                                 throw logic_error("User quit");
                                                         break;
                                                 }
@@ -1068,25 +1074,18 @@ class Context
                                         }
                         }
                 }
+  
 
         public: 
                 Context(int argc, char **)
                 {
                         srand(time(NULL));
-
-                        Init_SDL();
-
-                        Init_GL();
-
-                        Init_Bullet();
-
-                        const char *scene = "assets/sandbox.fbx", *physics = "assets/sandbox.bullet";
-
-                        Load_Scene(scene);
-
-                        Load_Physics(physics);
-
-                        Populate_World();
+                        InitSDL();
+                        InitGL();
+                        InitBullet();
+                        InitScene();
+                        InitPhysics();
+                        Bodies();
 
                 }
 
@@ -1111,7 +1110,6 @@ class Context
 
                 void Loop()
                 {
-                        unsigned int tick;
                         while (1)
                         {
                                 tick = SDL_GetTicks();

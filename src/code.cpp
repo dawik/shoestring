@@ -23,6 +23,7 @@
 #include <btBulletWorldImporter.h>
 
 #include "glstuff.h"
+#include "text.h"
 
 /*****************************************************************************************
  * Orthodox C++                                                                          *
@@ -38,11 +39,12 @@ static const float playerRadius = 2.0;
 static const float movementSpeed = 8.0;
 static const float breakFactor = -25.0;
 static const vec3 up(0,0,-1);
+static atlas *texture_atlas;
 
-class Context; 
-class Material; 
-class Mesh; 
-class Object; 
+class Context;
+class Material;
+class Mesh;
+class Object;
 class Camera;
 
 enum {LEFT = 0, RIGHT = 1, FORWARD = 2, BACK = 3, LEFT_CLICK = 4, RIGHT_CLICK = 5, MIDDLE_CLICK = 6, JUMP = 7};
@@ -296,7 +298,7 @@ class Object
 class Context
 {
         private:
-                const char *scene_file = "assets/sandbox.fbx", *bullet_file = "assets/sandbox.bullet";
+                const char *scene_file = "assets/sandbox.obj", *bullet_file = "assets/sandbox.bullet";
                 btBulletWorldImporter*		m_fileLoader;
                 Assimp::Importer importer;
                 shared_ptr<btDiscreteDynamicsWorld> world;
@@ -356,6 +358,7 @@ class Context
                         vec4 ray_end_world = InverseViewMatrix * ray_end_camera; ray_end_world /=ray_end_world.w;
 
                         const float ray_travel_length = 10000.0;
+
                         vec3 out_direction(normalize(ray_end_world - ray_start_world) * ray_travel_length);
 
                         btCollisionWorld::ClosestRayResultCallback RayCallback(
@@ -441,8 +444,8 @@ class Context
                                 exit(1);       
                         }
 
-                        screenWidth = displayMode.w / 2;
-                        screenHeight = displayMode.h / 2;
+                        screenWidth = displayMode.w;
+                        screenHeight = displayMode.h;
                         window = SDL_CreateWindow("Shoestring Game Engine", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, screenWidth, screenHeight, SDL_WINDOW_OPENGL | SDL_WINDOW_MAXIMIZED);
                 }
 
@@ -453,12 +456,14 @@ class Context
                         glewInit(); 
                         staticShader = compile_shader("src/default.vs", "src/default.fs");
 
-                        glUseProgram(staticShader);
-                        glEnable(GL_BLEND);
-                        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
                         gl_error();
                 }
+
+                void InitFreetype(void)
+                {
+                  init_resources(texture_atlas);
+                }
+
 
                 void InitBullet(void)
                 {
@@ -569,7 +574,7 @@ class Context
                 void Bodies(void)
                 {
 
-                        btTransform t;  
+                        btTransform t;
 
                         //instancesFromFile("bodies.dat");
 
@@ -586,6 +591,8 @@ class Context
 
                         {
                                 Camera cam = cameras.size() ? cameras.at(0) : Camera();
+
+                                cam = Camera();
 
                                 playerPitch = TWOPI;
                                 playerYaw = TWOPI;
@@ -757,6 +764,10 @@ class Context
                 {
                         struct draw_opts opt;
                         Material defaultMaterial;
+                        glUseProgram(staticShader);
+                        glEnable(GL_BLEND);
+                        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
 
                         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
                         glClearColor(0,0,1,0.5);
@@ -799,21 +810,24 @@ class Context
                         glDisable(GL_CULL_FACE);
                         glDisable(GL_DEPTH_TEST);
                         glDisable(GL_TEXTURE_2D);
+                        glDisable(GL_BLEND);
+                        btVector3 playerPosition = player->body->getWorldTransform().getOrigin();
+                        position(screenWidth, screenHeight, playerPosition.x(), playerPosition.y(), playerPosition.z());
                 }
 
-                void PollInput()
-                {
-                        SDL_Event event;
-                        while (SDL_PollEvent (&event))
-                        {
-                                const Uint8 *keystate = SDL_GetKeyboardState(NULL);
-                                switch (event.type) 
-                                {
-                                        case SDL_MOUSEWHEEL:
-                                                {
-                                                        btTransform t;
-                                                        t.setIdentity();
-                                                        t.setOrigin(player->body->getWorldTransform().getOrigin());
+  void PollInput()
+  {
+    SDL_Event event;
+    while (SDL_PollEvent (&event))
+      {
+        const Uint8 *keystate = SDL_GetKeyboardState(NULL);
+        switch (event.type) 
+          {
+          case SDL_MOUSEWHEEL:
+            {
+              btTransform t;
+              t.setIdentity();
+              t.setOrigin(player->body->getWorldTransform().getOrigin());
 
                                                         const float radius = 10;
                                                         t.setOrigin(t.getOrigin() + (btVector3(forward.x, forward.y, forward.z) * radius));
@@ -827,16 +841,15 @@ class Context
                                                 {
                                                         case SDL_BUTTON_LEFT:
                                                                 {
-                                                                        printf("left\n");
                                                                         playerInput[LEFT_CLICK] = 1;
                                                                         break;
                                                                 }
                                                         case SDL_BUTTON_MIDDLE:
                                                                 {
-                                                                        printf("mjurr\n");
                                                                         playerInput[MIDDLE_CLICK] = 1;
                                                                         break;
                                                                 }
+
 
                                                         case SDL_BUTTON_RIGHT:
                                                                 //if (player_grounded)
@@ -911,7 +924,7 @@ class Context
                                         case SDL_KEYUP:
                                                 {
 
-                                                        playerInput[MIDDLE_CLICK] = keystate[SDL_SCANCODE_R] ? 1 : 0;
+                                                        playerInput[MIDDLE_CLICK] = keystate[SDL_SCANCODE_Q] ? 1 : 0;
                                                         playerInput[FORWARD] = keystate[SDL_SCANCODE_W] ? 1 : 0;
                                                         playerInput[BACK] = keystate[SDL_SCANCODE_S] ? 1 : 0;
                                                         playerInput[RIGHT] = keystate[SDL_SCANCODE_D] ? 1 : 0;
@@ -1082,6 +1095,7 @@ class Context
                         srand(time(NULL));
                         InitSDL();
                         InitGL();
+                        InitFreetype();
                         InitBullet();
                         InitScene();
                         InitPhysics();

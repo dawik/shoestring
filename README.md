@@ -3,24 +3,6 @@
 ![Awesome demo](https://github.com/dawik/shoestring/raw/master/assets/demo.gif)
 
 > My effort to leverage the power of Blender and Blender Game Engine to the speed and portability of C++.
-> Currently linux only.
-
-### Features
-  - Bullet physics constraints and rigid body import/deserialization
-  - Model loading via assimp
-  - First person camera
-  - In-game level editing
-  - Grapple hook
-  - Darth vader style object grabbing
-
-### Roadmap
-   - Graphical UI
-   - Skeletal animation
-   - OpenAL integration
-   - Windows/OSX cross compilation
-   - Emscripten compilation
-   - Library implementation
-   - Proper documentation
 
 ### Version
 0.1.0

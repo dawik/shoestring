@@ -130,3 +130,17 @@ static void compile_source(GLuint shader, const char* src)
 }
 
 
+
+GLint get_attrib(GLuint program, const char *name) {
+	GLint attribute = glGetAttribLocation(program, name);
+	if(attribute == -1)
+		fprintf(stderr, "Could not bind attribute %s\n", name);
+	return attribute;
+}
+
+GLint get_uniform(GLuint program, const char *name) {
+	GLint uniform = glGetUniformLocation(program, name);
+	if(uniform == -1)
+		fprintf(stderr, "Could not bind uniform %s\n", name);
+	return uniform;
+}

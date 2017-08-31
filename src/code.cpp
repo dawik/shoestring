@@ -298,7 +298,7 @@ class Object
 class Context
 {
         private:
-                const char *scene_file = "assets/sandbox.obj", *bullet_file = "assets/sandbox.bullet";
+                const char *scene_file = "assets/sandbox.fbx", *bullet_file = "assets/sandbox.bullet";
                 btBulletWorldImporter*		m_fileLoader;
                 Assimp::Importer importer;
                 shared_ptr<btDiscreteDynamicsWorld> world;

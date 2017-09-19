@@ -72,8 +72,11 @@ GLuint compile_shader(const char* vs, const char* fs)
   glAttachShader(programShader, vertexShader);
   glAttachShader(programShader, fragmentShader);
 
+  printf("compiling VS\n");
   compile_source(vertexShader, vertex.c_str());
+  printf("vertex shader OK\n");
   compile_source(fragmentShader, frag.c_str());
+  printf("frag shader OK\n");
 
   glDeleteShader(vertexShader);
   glDeleteShader(fragmentShader);
@@ -124,6 +127,7 @@ static void compile_source(GLuint shader, const char* src)
   glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
   glGetShaderInfoLog(shader, 4096, &length, log);
   if(status == GL_FALSE) {
+    printf("humzihum %s\n", src);
     fprintf(stderr, "compile failed %s\n", log);
     throw runtime_error("GLSL Compilation error");
   }

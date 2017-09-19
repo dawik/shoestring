@@ -121,7 +121,7 @@ struct Instance {
   friend Object;
   friend Context;
 private:
-  float transform[16];
+  btScalar transform[16];
   string name;
 public:
   Instance(const char *_name) : name(string(_name)) {};
@@ -137,7 +137,7 @@ private:
   string name = "Camera";
   float fov = 49.134342;
   float near = 0.01;
-  float far = 10000.f;
+  float far = 1000.f;
   float aspect = 1.77778;
   mat4 world = mat4(1.0);
 
@@ -205,9 +205,9 @@ public:
     delete shape;
   };
 
-  Instance addInstance(shared_ptr<btDiscreteDynamicsWorld> world, btTransform t, btScalar mass, btRigidBody *b)
+  Instance addInstance(shared_ptr<btDiscreteDynamicsWorld> world, btTransform transform, btScalar mass, btRigidBody *b)
   {
-    btMotionState* motion=new btDefaultMotionState(t);
+    btMotionState* motion=new btDefaultMotionState(transform);
     btVector3 inertia(0,0,0);
     if (mass >= 0.0)
       shape->calculateLocalInertia(mass,inertia);
@@ -225,7 +225,7 @@ public:
       world->addRigidBody(body);
     bodies.push_back(body);
     Instance instance(name);
-    t.getOpenGLMatrix(instance.transform);
+    //transform.getOpenGLMatrix(instance.transform);
     return instance;
   }
 
@@ -447,15 +447,17 @@ private:
 
   void initGL(void)
   {
+    glewExperimental = GL_TRUE;
     int major, minor;
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
     SDL_GL_GetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, &major);
     SDL_GL_GetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, &minor);
     SDL_GL_SetAttribute( SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE );
+    SDL_GL_SetAttribute (SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
     SDL_GL_CreateContext(window);
     printf("GL version %d.%d\n", major, minor);
-    //glewExperimental = GL_TRUE;
+    printf("Supported GLSL version is %s.\n", (char *)glGetString(GL_SHADING_LANGUAGE_VERSION));
     glewInit();
     staticShader = compile_shader("src/default.vs", "src/default.fs");
 
@@ -572,6 +574,7 @@ private:
   {
 
     btTransform t;
+    t.setIdentity();
 
     //instancesFromFile("bodies.dat");
 
@@ -580,8 +583,8 @@ private:
 
       if (objects.count(i.name))
         {
+          printf("Adding instance %s\n", i.name.c_str());
           objects[i.name]->addInstance(world, t, 1.0 / objects[i.name]->body->getInvMass(), objects[i.name]->body);
-          printf("Added instance %s\n", i.name.c_str());
         }
     }
 
@@ -813,6 +816,7 @@ private:
   void drawUI()  {
     btVector3 playerPosition = player->body->getWorldTransform().getOrigin();
     position(screenWidth, screenHeight, playerPosition.x(), playerPosition.y(), playerPosition.z());
+    printf("mmm");
   }
 
   void pollInput()

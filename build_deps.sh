@@ -12,7 +12,7 @@ make
 cd ../../bin
 for i in *.a
 do
-  mv -- "$i" "${i/_*/\.a}"
+  mv -- "$i" "${i/_*/.a}"
 done
 
 cd ../../assimp

@@ -121,7 +121,7 @@ struct Instance {
   friend Object;
   friend Context;
 private:
-  btScalar transform[16];
+  float transform[16] = {0};
   string name;
 public:
   Instance(const char *_name) : name(string(_name)) {};
@@ -205,7 +205,7 @@ public:
     delete shape;
   };
 
-  Instance addInstance(shared_ptr<btDiscreteDynamicsWorld> world, btTransform transform, btScalar mass, btRigidBody *b)
+  Instance *addInstance(shared_ptr<btDiscreteDynamicsWorld> world, btTransform transform, btScalar mass, btRigidBody *b)
   {
     btMotionState* motion=new btDefaultMotionState(transform);
     btVector3 inertia(0,0,0);
@@ -224,8 +224,8 @@ public:
     if (!b)
       world->addRigidBody(body);
     bodies.push_back(body);
-    Instance instance(name);
-    //transform.getOpenGLMatrix(instance.transform);
+    Instance *instance = new Instance(name);
+    transform.getOpenGLMatrix(instance->transform);
     return instance;
   }
 
@@ -308,7 +308,7 @@ private:
   unordered_map<string, shared_ptr<Mesh>> meshes;
 
   unordered_map<string, shared_ptr<Object>> objects;
-  vector<Instance> addedInstances;
+  vector<Instance *> addedInstances;
 
   SDL_Window *window;
   SDL_DisplayMode displayMode = { SDL_PIXELFORMAT_UNKNOWN, 0, 0, 0, 0 };
@@ -387,11 +387,11 @@ private:
       {
         // Transpose left-handed assimp transformation and store it along with node name
         aiMatrix4x4 _t = node->mTransformation * _transform;
-        Instance i(node->mName.data);
-        i.transform[0] = _t.a1; i.transform[4] = _t.a2; i.transform[8] = _t.a3; i.transform[12] = _t.a4;
-        i.transform[1] = _t.b1; i.transform[5] = _t.b2; i.transform[9] = _t.b3; i.transform[13] = _t.b4;
-        i.transform[2] = _t.c1; i.transform[6] = _t.c2; i.transform[10] = _t.c3; i.transform[14] = _t.c4;
-        i.transform[3] = _t.d1; i.transform[7] = _t.d2; i.transform[11] = _t.d3; i.transform[15] = _t.d4;
+        Instance *i = new Instance(node->mName.data);
+        i->transform[0] = _t.a1; i->transform[4] = _t.a2; i->transform[8] = _t.a3; i->transform[12] = _t.a4;
+        i->transform[1] = _t.b1; i->transform[5] = _t.b2; i->transform[9] = _t.b3; i->transform[13] = _t.b4;
+        i->transform[2] = _t.c1; i->transform[6] = _t.c2; i->transform[10] = _t.c3; i->transform[14] = _t.c4;
+        i->transform[3] = _t.d1; i->transform[7] = _t.d2; i->transform[11] = _t.d3; i->transform[15] = _t.d4;
         for (int i = 0; i < node->mNumChildren; i++) {
           instancesFromGraph(node->mChildren[i], _t);
         }
@@ -401,6 +401,7 @@ private:
 
   void instancesFromFile(const char *filename)
   {
+    /*
     fstream ifs(filename,ios::binary|ios::in|ios::ate );
     if (ifs.is_open())
       {
@@ -415,9 +416,11 @@ private:
         printf("Loaded %lu bodies from file\n", addedInstances.size());
         ifs.close();
       }
+    */
   }
   void instancesToFile(const char *filename)
   {
+    /*
     remove(filename);
     fstream ofs(filename,ios::out|ios::binary|ios::app);
     for (Instance i : addedInstances)
@@ -426,6 +429,7 @@ private:
         printf("Wrote instance %s\n", i.name.c_str());
       }
     ofs.close();
+  */
   }
 
   void initSDL(void)
@@ -578,13 +582,13 @@ private:
 
     //instancesFromFile("bodies.dat");
 
-    for(Instance &i : addedInstances) {
-      t.setFromOpenGLMatrix(i.transform);
+    for(Instance *i : addedInstances) {
+      t.setFromOpenGLMatrix(i->transform);
 
-      if (objects.count(i.name))
+      if (objects.count(i->name))
         {
-          printf("Adding instance %s\n", i.name.c_str());
-          objects[i.name]->addInstance(world, t, 1.0 / objects[i.name]->body->getInvMass(), objects[i.name]->body);
+          printf("Adding instance %s\n", i->name.c_str());
+          objects[i->name]->addInstance(world, t, 1.0 / objects[i->name]->body->getInvMass(), objects[i->name]->body);
         }
     }
 
@@ -1090,7 +1094,7 @@ private:
     const float radius = 10;
     t.setOrigin(t.getOrigin() + (btVector3(forward.x, forward.y, forward.z) * radius));
     t.setOrigin(btVector3(round(t.getOrigin().x()),round(t.getOrigin().y()), round(t.getOrigin().z())));
-    Instance instance = createObj->addInstance(world, t, 1.0 / createObj->body->getInvMass(), NULL);
+    Instance *instance = createObj->addInstance(world, t, 1.0 / createObj->body->getInvMass(), NULL);
     addedInstances.push_back(instance);
   }
 
@@ -1101,7 +1105,7 @@ private:
         btTransform t;
         t.setIdentity();
         t.setOrigin(btVector3(x*2,y*2,0));
-        Instance instance = objects["Cube.001"]->addInstance(world, t, 1.0 / objects["Cube.001"]->body->getInvMass(), NULL);
+        Instance *instance = objects["Cube.001"]->addInstance(world, t, 1.0 / objects["Cube.001"]->body->getInvMass(), NULL);
         addedInstances.push_back(instance);
       }
     }

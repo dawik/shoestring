@@ -762,6 +762,7 @@ private:
     glClearColor(0,0,0,0);
     glEnable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
+    glCullFace(GL_FRONT);
     glDepthMask(GL_TRUE);
 
     {
@@ -1140,7 +1141,7 @@ public:
         pollInput();
         updatePlayer();
         drawScene();
-        //drawUI();
+        drawUI();
         SDL_GL_SwapWindow(window);
 
         if(1000/60>=SDL_GetTicks()-tick)

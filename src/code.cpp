@@ -759,7 +759,7 @@ private:
 
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glClearColor(0,0,1,0.5);
+    glClearColor(0,0,0,0);
     glEnable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
     glDepthMask(GL_TRUE);
@@ -1140,7 +1140,7 @@ public:
         pollInput();
         updatePlayer();
         drawScene();
-        drawUI();
+        //drawUI();
         SDL_GL_SwapWindow(window);
 
         if(1000/60>=SDL_GetTicks()-tick)

@@ -23,7 +23,7 @@ void gl_error()
     }
 }
 
-GLuint int load_texture(char *file)
+GLuint load_texture(char *file)
 {
   unsigned int texture;
   unsigned char *image;

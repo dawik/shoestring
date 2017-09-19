@@ -137,7 +137,7 @@ private:
   string name = "Camera";
   float fov = 49.134342;
   float near = 0.01;
-  float far = 1000.f;
+  float far = 10000.f;
   float aspect = 1.77778;
   mat4 world = mat4(1.0);
 
@@ -816,7 +816,6 @@ private:
   void drawUI()  {
     btVector3 playerPosition = player->body->getWorldTransform().getOrigin();
     position(screenWidth, screenHeight, playerPosition.x(), playerPosition.y(), playerPosition.z());
-    printf("mmm");
   }
 
   void pollInput()

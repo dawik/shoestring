@@ -447,8 +447,15 @@ private:
 
   void initGL(void)
   {
+    int major, minor;
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
+    SDL_GL_GetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, &major);
+    SDL_GL_GetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, &minor);
+    SDL_GL_SetAttribute( SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE );
     SDL_GL_CreateContext(window);
-    glewExperimental = GL_TRUE;
+    printf("GL version %d.%d\n", major, minor);
+    //glewExperimental = GL_TRUE;
     glewInit();
     staticShader = compile_shader("src/default.vs", "src/default.fs");
 

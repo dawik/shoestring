@@ -4,9 +4,9 @@
 git submodule update --init --recursive
 
 cd bullet3/build3
-./premake4_linux64 gmake
+./premake4_osx gmake
 cd ..
-sed -i 's/\s\+\(printf("unknown chunk\\n")\);/\/\/\1/' */*/*/*.cpp
+sed -i -e 's/\s\+\(printf("unknown chunk\\n")\);/\/\/\1/' */*/*/*.cpp
 cd build3/gmake
 make
 cd ../../bin

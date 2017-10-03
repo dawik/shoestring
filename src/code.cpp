@@ -464,21 +464,23 @@ private:
   void initGLFW(void)
   {
     if (!glfwInit()) {
-      printf("glfw error\n");
+      throw runtime_error("GLFW fail");
     }
+    glfwSetErrorCallback(error_callback);
     const GLFWvidmode* mode = glfwGetVideoMode(glfwGetPrimaryMonitor());
     glfwWindowHint(GLFW_RED_BITS, mode->redBits);
     glfwWindowHint(GLFW_GREEN_BITS, mode->greenBits);
     glfwWindowHint(GLFW_BLUE_BITS, mode->blueBits);
     glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, 1);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
     window = glfwCreateWindow(mode->width, mode->height, "Shoestring", glfwGetPrimaryMonitor(), NULL);
-    glfwSetErrorCallback(error_callback);
     glfwSetKeyCallback(window, key_callback);
     glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetWindowUserPointer(window, this);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
     glfwMakeContextCurrent(window);
   }
 

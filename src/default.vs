@@ -18,4 +18,4 @@ void main() {
         uvFrag = uv;
         normalFrag = normal;
         vertexFrag = vertex;
-};
+}

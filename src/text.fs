@@ -1,7 +1,11 @@
-varying vec2 texpos;
+#version 150
+
+in vec2 texpos;
 uniform sampler2D tex;
 uniform vec4 color;
 
+out vec4 finalColor;
+
 void main(void) {
-  gl_FragColor = vec4(1, 1, 1, texture2D(tex, texpos).a) * color;
+  finalColor = vec4(1, 1, 1, texture(tex, texpos).a) * color;
 }

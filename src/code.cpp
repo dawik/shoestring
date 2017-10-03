@@ -2,6 +2,7 @@
 
 #include <GL/glew.h>
 #include <GL/gl.h>
+#include <GLFW/glfw3.h>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -9,8 +10,6 @@
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_opengl.h>
 #include <stdio.h>
 #include <memory>
 #include <vector>
@@ -310,15 +309,16 @@ private:
   unordered_map<string, shared_ptr<Object>> objects;
   vector<Instance> addedInstances;
 
-  SDL_Window *window;
-  SDL_DisplayMode displayMode = { SDL_PIXELFORMAT_UNKNOWN, 0, 0, 0, 0 };
 
   int screenWidth;
   int screenHeight;
   int videoMode;
+  GLFWwindow* window;
 
   Object *player;
   float mouseSensitivity = 0.005;
+  double previousX = 0.f;
+  double previousY = 0.f;
   float playerPitch;
   float playerYaw;
   //bool player_grounded = false;
@@ -337,7 +337,6 @@ private:
   vec3 eye, forward;
 
   GLuint staticShader;
-  unsigned int tick;
 
   btRigidBody *RayTrace(int x, int y)
   {
@@ -428,26 +427,63 @@ private:
     ofs.close();
   }
 
-  void initSDL(void)
+  static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
   {
-    SDL_Init( SDL_INIT_VIDEO );
-    SDL_SetRelativeMouseMode(SDL_TRUE);
-    SDL_ShowCursor(0);
-    videoMode = 0;
+    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
+      glfwSetWindowShouldClose(window, 1);
+  }
 
-    if (SDL_GetDisplayMode(0, 0, &displayMode) != 0) {
-      SDL_Log("SDL_GetDisplayMode failed: %s", SDL_GetError());
-      exit(1);
+  static void error_callback(int error, const char* description)
+  {
+    fprintf(stderr, "Error: %s\n", description);
+  }
+
+  static void mouse_callback(GLFWwindow* window, double x, double y)
+  {
+    fprintf(stdout, "Mouse: %f %f\n", x, y);
+    Context *thisContext = static_cast<Context *> (glfwGetWindowUserPointer(window));
+    thisContext->processMouse(x, y);
+  }
+
+  void processMouse(double x, double y) {
+    float pitchMotion = mouseSensitivity * (x - previousX);
+    float yawMotion = mouseSensitivity * (y - previousY);
+    previousX = x;
+    previousY = y;
+    playerYaw += yawMotion;
+    // Restrict yaw to avoid inverting Y orientation
+    if (playerYaw < 4.75 || playerYaw > 7.8)
+      playerYaw-=yawMotion;
+    if (playerPitch > 2 * TWOPI)
+      playerPitch = playerPitch - TWOPI;
+    else if (playerPitch < TWOPI)
+      playerPitch = TWOPI + playerPitch;
+    else playerPitch += pitchMotion;
+  }
+
+  void initGLFW(void)
+  {
+    if (!glfwInit()) {
+      printf("glfw error\n");
     }
-
-    screenWidth = displayMode.w;
-    screenHeight = displayMode.h;
-    window = SDL_CreateWindow("Shoestring Game Engine", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, screenWidth, screenHeight, SDL_WINDOW_OPENGL | SDL_WINDOW_MAXIMIZED);
+    const GLFWvidmode* mode = glfwGetVideoMode(glfwGetPrimaryMonitor());
+    glfwWindowHint(GLFW_RED_BITS, mode->redBits);
+    glfwWindowHint(GLFW_GREEN_BITS, mode->greenBits);
+    glfwWindowHint(GLFW_BLUE_BITS, mode->blueBits);
+    glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
+    window = glfwCreateWindow(mode->width, mode->height, "Shoestring", glfwGetPrimaryMonitor(), NULL);
+    glfwSetErrorCallback(error_callback);
+    glfwSetKeyCallback(window, key_callback);
+    glfwSetCursorPosCallback(window, mouse_callback);
+    glfwSetWindowUserPointer(window, this);
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+    glfwMakeContextCurrent(window);
   }
 
   void initGL(void)
   {
-    SDL_GL_CreateContext(window);
     glewExperimental = GL_TRUE;
     glewInit();
     staticShader = compile_shader("src/default.vs", "src/default.fs");
@@ -810,6 +846,7 @@ private:
 
   void pollInput()
   {
+    /*
     SDL_Event event;
     while (SDL_PollEvent (&event))
       {
@@ -923,6 +960,7 @@ private:
           }
       }
 
+    */
   }
 
 
@@ -1100,7 +1138,7 @@ private:
 public:
   Context(int argc, char **)
   {
-    initSDL();
+    initGLFW();
     initGL();
     initFreetype();
     initBullet();
@@ -1126,28 +1164,32 @@ public:
         delete obj;
       }
     destroyFreetype();
-    SDL_Quit();
+    //SDL_Quit();
   }
 
 
   void loop()
   {
     srand(time(NULL));
-    while (1)
+    while (!glfwWindowShouldClose(window))
       {
+        /*
         tick = SDL_GetTicks();
-        world->stepSimulation(1/60.0);
-        collision();
         pollInput();
-        updatePlayer();
-        drawScene();
-        drawUI();
         SDL_GL_SwapWindow(window);
 
         if(1000/60>=SDL_GetTicks()-tick)
           {
             SDL_Delay(1000.0/60-(SDL_GetTicks()-tick));
           }
+        */
+        world->stepSimulation(1/60.0);
+        collision();
+        updatePlayer();
+        drawScene();
+        drawUI();
+        glfwPollEvents();
+        glfwSwapBuffers(window);
       }
   }
 

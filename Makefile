@@ -2,7 +2,7 @@ PROGRAM=ss-engine
 CC=clang
 FLAGS=-g -Wall -Wno-unused-function -std=c++11 -lstdc++
 FREETYPE=-I/usr/include/freetype2 -lfreetype
-LINKED_LIBRARIES=-lstdc++ -lm -lGL -lGLEW -lGL -lSDL2 -lfreetype -lGLU -lBulletDynamics -lBulletCollision -lLinearMath
+LINKED_LIBRARIES=-lstdc++ -lm -lGL -lGLEW -lGL -lglfw -lfreetype -lGLU -lBulletDynamics -lBulletCollision -lLinearMath
 SOURCE=src/code.cpp src/glstuff.cpp src/text.cpp -I./src
 ASSIMP=-I./assimp/include ./assimp/lib/libassimp.so
 BULLET_OBJ_DIR=./bullet3/build3/gmake/obj/x64/Release

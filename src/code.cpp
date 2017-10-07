@@ -290,6 +290,14 @@ public:
   };
 };
 
+class Player {
+public:
+  string name;
+  float yaw;
+  float pitch;
+  Object *object;
+};
+
 class Context
 {
 private:
@@ -312,15 +320,12 @@ private:
 
   int screenWidth;
   int screenHeight;
-  int videoMode;
   GLFWwindow* window;
 
-  Object *player;
+  Player player;
   float mouseSensitivity = 0.005;
   double previousX = 0.f;
   double previousY = 0.f;
-  float playerPitch;
-  float playerYaw;
   //bool player_grounded = false;
 
   int playerInput[8];
@@ -427,58 +432,99 @@ private:
     ofs.close();
   }
 
-  static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
+  static void glfwMouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
   {
-    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
-      glfwSetWindowShouldClose(window, 1);
+    Context *context = static_cast<Context *> (glfwGetWindowUserPointer(window));
+    context->playerInput[LEFT_CLICK] = button == GLFW_MOUSE_BUTTON_LEFT ? action : context->playerInput[LEFT_CLICK];
+    context->playerInput[MIDDLE_CLICK] = button == GLFW_MOUSE_BUTTON_MIDDLE ? action : context->playerInput[MIDDLE_CLICK];
+    if (button == GLFW_MOUSE_BUTTON_RIGHT) {
+      btVector3 velocity = context->player.object->body->getLinearVelocity();
+      velocity.setZ(10);
+      context->player.object->body->setLinearVelocity(velocity);
+    }
   }
 
-  static void error_callback(int error, const char* description)
+  static void glfwKeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
+  {
+    Context *context = static_cast<Context *> (glfwGetWindowUserPointer(window));
+    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
+      glfwSetWindowShouldClose(window, 1);
+    }
+    if (key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
+      context->spawnCurrentObject();
+    }
+    context->playerInput[FORWARD] = key == GLFW_KEY_W ? action : context->playerInput[FORWARD];
+    context->playerInput[BACK] = key == GLFW_KEY_S ? action : context->playerInput[BACK];
+    context->playerInput[RIGHT] = key == GLFW_KEY_D ? action : context->playerInput[RIGHT];
+    context->playerInput[LEFT] = key == GLFW_KEY_A ? action : context->playerInput[LEFT];
+    if (action == GLFW_PRESS) {
+      if (key == GLFW_KEY_J)
+        {
+          context->createObjIdx++;
+          if (context->createObjIdx + 1 > context->objects.size())
+            context->createObjIdx = 0;
+        }
+      if (key == GLFW_KEY_K)
+        {
+          context->createObjIdx--;
+          if (context->createObjIdx < 0)
+            context->createObjIdx = context->objects.size() - 1;
+        }
+      if (key == GLFW_KEY_I)
+        {
+          context->clearInstances();
+        }
+      if (key == GLFW_KEY_O)
+        {
+          context->instancesToFile("bodies.dat");
+        }
+    }
+  }
+
+  static void glfwErrorCallback(int error, const char* description)
   {
     fprintf(stderr, "Error: %s\n", description);
   }
 
-  static void mouse_callback(GLFWwindow* window, double x, double y)
+  static void glfwMouseCallback(GLFWwindow* window, double x, double y)
   {
-    fprintf(stdout, "Mouse: %f %f\n", x, y);
-    Context *thisContext = static_cast<Context *> (glfwGetWindowUserPointer(window));
-    thisContext->processMouse(x, y);
-  }
-
-  void processMouse(double x, double y) {
-    float pitchMotion = mouseSensitivity * (x - previousX);
-    float yawMotion = mouseSensitivity * (y - previousY);
-    previousX = x;
-    previousY = y;
-    playerYaw += yawMotion;
+    Context *context = static_cast<Context *> (glfwGetWindowUserPointer(window));
+    float pitchMotion = context->mouseSensitivity * (x - context->previousX);
+    float yawMotion = context->mouseSensitivity * (y - context->previousY);
+    context->previousX = x;
+    context->previousY = y;
+    context->player.yaw += yawMotion;
     // Restrict yaw to avoid inverting Y orientation
-    if (playerYaw < 4.75 || playerYaw > 7.8)
-      playerYaw-=yawMotion;
-    if (playerPitch > 2 * TWOPI)
-      playerPitch = playerPitch - TWOPI;
-    else if (playerPitch < TWOPI)
-      playerPitch = TWOPI + playerPitch;
-    else playerPitch += pitchMotion;
+    if (context->player.yaw < 4.75 || context->player.yaw > 7.8)
+      context->player.yaw-=yawMotion;
+    if (context->player.pitch > 2 * TWOPI)
+      context->player.pitch = context->player.pitch - TWOPI;
+    else if (context->player.pitch < TWOPI)
+      context->player.pitch = TWOPI + context->player.pitch;
+    else context->player.pitch += pitchMotion;
   }
 
   void initGLFW(void)
   {
     if (!glfwInit()) {
-      printf("glfw error\n");
+      throw runtime_error("glfw error");
     }
     const GLFWvidmode* mode = glfwGetVideoMode(glfwGetPrimaryMonitor());
+    screenWidth = mode->width;
+    screenHeight = mode->height;
     glfwWindowHint(GLFW_RED_BITS, mode->redBits);
     glfwWindowHint(GLFW_GREEN_BITS, mode->greenBits);
     glfwWindowHint(GLFW_BLUE_BITS, mode->blueBits);
     glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
     window = glfwCreateWindow(mode->width, mode->height, "Shoestring", glfwGetPrimaryMonitor(), NULL);
-    glfwSetErrorCallback(error_callback);
-    glfwSetKeyCallback(window, key_callback);
-    glfwSetCursorPosCallback(window, mouse_callback);
+    glfwSetErrorCallback(glfwErrorCallback);
+    glfwSetKeyCallback(window, glfwKeyCallback);
+    glfwSetMouseButtonCallback(window, glfwMouseButtonCallback);
+    glfwSetCursorPosCallback(window, glfwMouseCallback);
     glfwSetWindowUserPointer(window, this);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
     glfwMakeContextCurrent(window);
   }
 
@@ -620,8 +666,8 @@ private:
 
       cam = Camera();
 
-      playerPitch = TWOPI;
-      playerYaw = TWOPI;
+      player.pitch = TWOPI;
+      player.yaw = TWOPI;
 
       projection = perspective(cam.fov, cam.aspect, cam.near, cam.far);
 
@@ -642,7 +688,7 @@ private:
 
       world->addRigidBody(playerBody);
 
-      player = new Object("Player", playerBody, NULL);
+      player.object = new Object("Player", playerBody, NULL);
     }
 
     addedInstances.clear();
@@ -821,7 +867,7 @@ private:
 
       btTransform t;
       t.setIdentity();
-      t.setOrigin(player->body->getWorldTransform().getOrigin());
+      t.setOrigin(player.object->body->getWorldTransform().getOrigin());
       t.setOrigin(t.getOrigin() + btVector3(forward.x * summonDistance,
                                             forward.y * summonDistance,
                                             forward.z * summonDistance));
@@ -840,144 +886,29 @@ private:
   }
 
   void drawUI()  {
-    btVector3 playerPosition = player->body->getWorldTransform().getOrigin();
+    btVector3 playerPosition = player.object->body->getWorldTransform().getOrigin();
     position(screenWidth, screenHeight, playerPosition.x(), playerPosition.y(), playerPosition.z());
   }
 
   void pollInput()
   {
-    /*
-    SDL_Event event;
-    while (SDL_PollEvent (&event))
-      {
-        const Uint8 *keystate = SDL_GetKeyboardState(NULL);
-        switch (event.type)
-          {
-          case SDL_MOUSEWHEEL:
-            {
-              spawnCurrentObject();
-              break;
-            }
-          case SDL_MOUSEBUTTONDOWN:
-            switch (event.button.button)
-              {
-              case SDL_BUTTON_LEFT:
-                {
-                  playerInput[LEFT_CLICK] = 1;
-                  break;
-                }
-              case SDL_BUTTON_MIDDLE:
-                {
-                  playerInput[MIDDLE_CLICK] = 1;
-                  break;
-                }
-
-
-              case SDL_BUTTON_RIGHT:
-                //if (player_grounded)
-                {
-                  btVector3 velocity = player->body->getLinearVelocity();
-                  velocity.setZ(10);
-                  player->body->setLinearVelocity(velocity);
-                  //player_grounded = false;
-                  break;
-                }
-              }
-            break;
-
-          case SDL_MOUSEMOTION:
-            {
-              float pitchMotion = mouseSensitivity * event.motion.xrel;
-              float yawMotion = mouseSensitivity * event.motion.yrel;
-              playerYaw += yawMotion;
-              // Restrict yaw to avoid inverting Y orientation
-              if (playerYaw < 4.75 || playerYaw > 7.8)
-                playerYaw-=yawMotion;
-              if (playerPitch > 2 * TWOPI)
-                playerPitch = playerPitch - TWOPI;
-              else if (playerPitch < TWOPI)
-                playerPitch = TWOPI + playerPitch;
-              else playerPitch += pitchMotion;
-              break;
-            }
-          case SDL_KEYDOWN:
-            {
-              if (keystate[SDLK_PLUS])
-                {
-                  createObjIdx++;
-                  if (createObjIdx + 1 > objects.size())
-                    createObjIdx = 0;
-                  break;
-                }
-              if (keystate[SDL_SCANCODE_MINUS])
-                {
-                  createObjIdx--;
-                  if (createObjIdx < 0)
-                    createObjIdx = objects.size() - 1;
-                  break;
-                }
-              if (keystate[SDL_SCANCODE_I])
-                {
-                  clearInstances();
-                }
-              if (keystate[SDL_SCANCODE_O])
-                {
-                  instancesToFile("bodies.dat");
-                }
-              if (keystate[SDL_SCANCODE_Q]) {
-                playerInput[MIDDLE_CLICK] = 1;
-              }
-              if (keystate[SDL_SCANCODE_SPACE])
-                {
-                  SDL_SetRelativeMouseMode((SDL_bool) !SDL_GetRelativeMouseMode());
-                }
-            }
-          case SDL_MOUSEBUTTONUP:
-            if (event.button.button == SDL_BUTTON_LEFT)
-              {
-                playerInput[LEFT_CLICK] = 0;
-                break;
-              }
-            if (event.button.button == SDL_BUTTON_MIDDLE)
-              {
-                playerInput[MIDDLE_CLICK] = 0;
-                break;
-              }
-          case SDL_KEYUP:
-            {
-
-              playerInput[MIDDLE_CLICK] = keystate[SDL_SCANCODE_Q] ? 1 : 0;
-              playerInput[FORWARD] = keystate[SDL_SCANCODE_W] ? 1 : 0;
-              playerInput[BACK] = keystate[SDL_SCANCODE_S] ? 1 : 0;
-              playerInput[RIGHT] = keystate[SDL_SCANCODE_D] ? 1 : 0;
-              playerInput[LEFT] = keystate[SDL_SCANCODE_A] ? 1 : 0;
-              if (keystate[SDL_SCANCODE_ESCAPE])
-                throw logic_error("User quit");
-              break;
-            }
-          case SDL_QUIT:
-            exit(0);
-          }
-      }
-
-    */
   }
 
 
 
   void updatePlayer() {
     {// Orientation
-      btVector3 playerOrigin = player->body->getWorldTransform().getOrigin();
+      btVector3 playerOrigin = player.object->body->getWorldTransform().getOrigin();
 
       eye = vec3(playerOrigin.x(), playerOrigin.y(), playerOrigin.z());
-      forward = vec3( cos(playerYaw)*sin(playerPitch), cos(playerYaw) * cos(playerPitch), sin(playerYaw) );
+      forward = vec3( cos(player.yaw)*sin(player.pitch), cos(player.yaw) * cos(player.pitch), sin(player.yaw) );
 
       look =  lookAt(eye, eye + (forward * float(5.0)), up);
     }
 
     { // Velocity
       vec3 left = cross(forward, up);
-      btVector3 velocity = player->body->getLinearVelocity();
+      btVector3 velocity = player.object->body->getLinearVelocity();
       btVector3 inputDirection(0,0,0);
       if (playerInput[LEFT])
         {
@@ -998,15 +929,15 @@ private:
       if (inputDirection.length() == 0)
         {
           btTransform t;
-          player->body->getMotionState()->getWorldTransform(t);
-          player->body->applyForce(btVector3(velocity.x() * breakFactor, velocity.y() * breakFactor, 0),t.getOrigin());
+          player.object->body->getMotionState()->getWorldTransform(t);
+          player.object->body->applyForce(btVector3(velocity.x() * breakFactor, velocity.y() * breakFactor, 0),t.getOrigin());
         }
       else
         {
           inputDirection = inputDirection.normalize();
           velocity = btVector3(inputDirection.x() * movementSpeed, inputDirection.y() * movementSpeed, velocity.z());
         }
-      player->body->setLinearVelocity(velocity);
+      player.object->body->setLinearVelocity(velocity);
     }
 
     {
@@ -1015,7 +946,7 @@ private:
         {
           if (heldObject)
             { // Summon object
-              player->body->getMotionState()->getWorldTransform(t);
+              player.object->body->getMotionState()->getWorldTransform(t);
               heldObject->getMotionState()->getWorldTransform(object);
               btVector3 summonTo(forward.x, forward.y, forward.z);
               btVector3 newVelocity = t.getOrigin()+(10*summonTo) - object.getOrigin();
@@ -1034,11 +965,11 @@ private:
         {
           if (grappleTarget)
             {
-              player->body->getMotionState()->getWorldTransform(t);
+              player.object->body->getMotionState()->getWorldTransform(t);
               btVector3 distance = (grapplePos - t.getOrigin());
               distance *= 2.0;
               if (distance.length() > 10)
-                player->body->setLinearVelocity(distance/2.0);
+                player.object->body->setLinearVelocity(distance/2.0);
               return;
             }
           else
@@ -1072,9 +1003,9 @@ private:
         btPersistentManifold* contactManifold =  world->getDispatcher()->getManifoldByIndexInternal(i);
         //const btCollisionObject* obA = contactManifold->getBody0();
         btRigidBody *_p = (btRigidBody*) contactManifold->getBody1();
-        if (_p == player->body)
+        if (_p == player.object->body)
           {
-            btVector3 velocity = player->body->getLinearVelocity();
+            btVector3 velocity = player.object->body->getLinearVelocity();
             if (fabs(velocity.z()) < 0.1)
               {
                 //player_grounded = true;
@@ -1113,7 +1044,7 @@ private:
   void spawnCurrentObject() {
     btTransform t;
     t.setIdentity();
-    t.setOrigin(player->body->getWorldTransform().getOrigin());
+    t.setOrigin(player.object->body->getWorldTransform().getOrigin());
 
     const float radius = 10;
     t.setOrigin(t.getOrigin() + (btVector3(forward.x, forward.y, forward.z) * radius));
@@ -1150,7 +1081,7 @@ public:
 
   ~Context()
   {
-    delete player;
+    delete player.object;
 
     for (int i=world->getNumCollisionObjects()-1; i>=0 ;i--)
       {
@@ -1173,16 +1104,6 @@ public:
     srand(time(NULL));
     while (!glfwWindowShouldClose(window))
       {
-        /*
-        tick = SDL_GetTicks();
-        pollInput();
-        SDL_GL_SwapWindow(window);
-
-        if(1000/60>=SDL_GetTicks()-tick)
-          {
-            SDL_Delay(1000.0/60-(SDL_GetTicks()-tick));
-          }
-        */
         world->stepSimulation(1/60.0);
         collision();
         updatePlayer();
@@ -1204,7 +1125,7 @@ int main( int argc, char *argv[] )
     }
   catch (exception &e)
     {
-      printf("%s\n", e.what());
+      fprintf(stderr, "%s\n", e.what());
     }
   return 0;
 }

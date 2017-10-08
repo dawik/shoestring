@@ -33,11 +33,6 @@ using namespace std;
 using namespace glm;
 enum {LEFT = 0, RIGHT = 1, FORWARD = 2, BACK = 3, LEFT_CLICK = 4, RIGHT_CLICK = 5, MIDDLE_CLICK = 6, JUMP = 7};
 static const float TWOPI = 6.28318530718;
-static const float playerMass = 1.0;
-static const float playerHeight = 2.0;
-static const float playerRadius = 2.0;
-static const float movementSpeed = 8.0;
-static const float breakFactor = -25.0;
 static const vec3 up(0,0,-1);
 class Context;
 class Material;
@@ -292,10 +287,36 @@ public:
 
 class Player {
 public:
+  Player(const char *name, mat4 worldTransform, shared_ptr<btDiscreteDynamicsWorld> world) {
+    this->name = name;
+
+    btVector3 inertia(0,0,0);
+    btTransform t;
+    btCapsuleShape *playerShape=new btCapsuleShape(radius, height);
+    playerShape->calculateLocalInertia(mass, inertia);
+    t.setFromOpenGLMatrix(value_ptr(transpose(worldTransform)));
+    btMotionState* motion=new btDefaultMotionState(t);
+    btRigidBody::btRigidBodyConstructionInfo info(mass,motion,playerShape,inertia);
+    btRigidBody* playerBody=new btRigidBody(info);
+
+    playerBody->setCollisionFlags( btCollisionObject::CF_CHARACTER_OBJECT);
+    playerBody->setSleepingThresholds(0.0, 0.0);
+    playerBody->setAngularFactor(0.0);
+
+    world->addRigidBody(playerBody);
+
+    this->object = new Object(name, playerBody, NULL);
+  }
   string name;
-  float yaw;
-  float pitch;
   Object *object;
+  float yaw = TWOPI;
+  float pitch = TWOPI;
+  int input[8] = {0};
+  float mass = 1.0;
+  float height = 2.0;
+  float radius = 2.0;
+  float movementSpeed = 8.0;
+  float breakFactor = -25.0;
 };
 
 class Context
@@ -322,13 +343,12 @@ private:
   int screenHeight;
   GLFWwindow* window;
 
-  Player player;
+  Player *player;
   float mouseSensitivity = 0.005;
   double previousX = 0.f;
   double previousY = 0.f;
   //bool player_grounded = false;
 
-  int playerInput[8];
 
   int createObjIdx = 0;
   shared_ptr<Object> createObj;
@@ -435,12 +455,12 @@ private:
   static void glfwMouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
   {
     Context *context = static_cast<Context *> (glfwGetWindowUserPointer(window));
-    context->playerInput[LEFT_CLICK] = button == GLFW_MOUSE_BUTTON_LEFT ? action : context->playerInput[LEFT_CLICK];
-    context->playerInput[MIDDLE_CLICK] = button == GLFW_MOUSE_BUTTON_MIDDLE ? action : context->playerInput[MIDDLE_CLICK];
+    context->player->input[LEFT_CLICK] = button == GLFW_MOUSE_BUTTON_LEFT ? action : context->player->input[LEFT_CLICK];
+    context->player->input[MIDDLE_CLICK] = button == GLFW_MOUSE_BUTTON_MIDDLE ? action : context->player->input[MIDDLE_CLICK];
     if (button == GLFW_MOUSE_BUTTON_RIGHT) {
-      btVector3 velocity = context->player.object->body->getLinearVelocity();
+      btVector3 velocity = context->player->object->body->getLinearVelocity();
       velocity.setZ(10);
-      context->player.object->body->setLinearVelocity(velocity);
+      context->player->object->body->setLinearVelocity(velocity);
     }
   }
 
@@ -453,10 +473,10 @@ private:
     if (key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
       context->spawnCurrentObject();
     }
-    context->playerInput[FORWARD] = key == GLFW_KEY_W ? action : context->playerInput[FORWARD];
-    context->playerInput[BACK] = key == GLFW_KEY_S ? action : context->playerInput[BACK];
-    context->playerInput[RIGHT] = key == GLFW_KEY_D ? action : context->playerInput[RIGHT];
-    context->playerInput[LEFT] = key == GLFW_KEY_A ? action : context->playerInput[LEFT];
+    context->player->input[FORWARD] = key == GLFW_KEY_W ? action : context->player->input[FORWARD];
+    context->player->input[BACK] = key == GLFW_KEY_S ? action : context->player->input[BACK];
+    context->player->input[RIGHT] = key == GLFW_KEY_D ? action : context->player->input[RIGHT];
+    context->player->input[LEFT] = key == GLFW_KEY_A ? action : context->player->input[LEFT];
     if (action == GLFW_PRESS) {
       if (key == GLFW_KEY_J)
         {
@@ -493,15 +513,15 @@ private:
     float yawMotion = context->mouseSensitivity * (y - context->previousY);
     context->previousX = x;
     context->previousY = y;
-    context->player.yaw += yawMotion;
+    context->player->yaw += yawMotion;
     // Restrict yaw to avoid inverting Y orientation
-    if (context->player.yaw < 4.75 || context->player.yaw > 7.8)
-      context->player.yaw-=yawMotion;
-    if (context->player.pitch > 2 * TWOPI)
-      context->player.pitch = context->player.pitch - TWOPI;
-    else if (context->player.pitch < TWOPI)
-      context->player.pitch = TWOPI + context->player.pitch;
-    else context->player.pitch += pitchMotion;
+    if (context->player->yaw < 4.75 || context->player->yaw > 7.8)
+      context->player->yaw-=yawMotion;
+    if (context->player->pitch > 2 * TWOPI)
+      context->player->pitch = context->player->pitch - TWOPI;
+    else if (context->player->pitch < TWOPI)
+      context->player->pitch = TWOPI + context->player->pitch;
+    else context->player->pitch += pitchMotion;
   }
 
   void initGLFW(void)
@@ -666,30 +686,11 @@ private:
 
       cam = Camera();
 
-      player.pitch = TWOPI;
-      player.yaw = TWOPI;
-
       projection = perspective(cam.fov, cam.aspect, cam.near, cam.far);
 
-      btVector3 inertia(0,0,0);
-
-      btCapsuleShape *playerShape=new btCapsuleShape(playerRadius, playerHeight);
-      playerShape->calculateLocalInertia(playerMass,inertia);
-
-      t.setFromOpenGLMatrix(value_ptr(transpose(cam.world)));
-      btMotionState* motion=new btDefaultMotionState(t);
-
-      btRigidBody::btRigidBodyConstructionInfo info(playerMass,motion,playerShape,inertia);
-      btRigidBody* playerBody=new btRigidBody(info);
-
-      playerBody->setCollisionFlags( btCollisionObject::CF_CHARACTER_OBJECT);
-      playerBody->setSleepingThresholds(0.0, 0.0);
-      playerBody->setAngularFactor(0.0);
-
-      world->addRigidBody(playerBody);
-
-      player.object = new Object("Player", playerBody, NULL);
+      player = new Player("Player", cam.world, world);
     }
+
 
     addedInstances.clear();
   }
@@ -867,7 +868,7 @@ private:
 
       btTransform t;
       t.setIdentity();
-      t.setOrigin(player.object->body->getWorldTransform().getOrigin());
+      t.setOrigin(player->object->body->getWorldTransform().getOrigin());
       t.setOrigin(t.getOrigin() + btVector3(forward.x * summonDistance,
                                             forward.y * summonDistance,
                                             forward.z * summonDistance));
@@ -886,7 +887,7 @@ private:
   }
 
   void drawUI()  {
-    btVector3 playerPosition = player.object->body->getWorldTransform().getOrigin();
+    btVector3 playerPosition = player->object->body->getWorldTransform().getOrigin();
     position(screenWidth, screenHeight, playerPosition.x(), playerPosition.y(), playerPosition.z());
   }
 
@@ -898,55 +899,55 @@ private:
 
   void updatePlayer() {
     {// Orientation
-      btVector3 playerOrigin = player.object->body->getWorldTransform().getOrigin();
+      btVector3 playerOrigin = player->object->body->getWorldTransform().getOrigin();
 
       eye = vec3(playerOrigin.x(), playerOrigin.y(), playerOrigin.z());
-      forward = vec3( cos(player.yaw)*sin(player.pitch), cos(player.yaw) * cos(player.pitch), sin(player.yaw) );
+      forward = vec3( cos(player->yaw)*sin(player->pitch), cos(player->yaw) * cos(player->pitch), sin(player->yaw) );
 
       look =  lookAt(eye, eye + (forward * float(5.0)), up);
     }
 
     { // Velocity
       vec3 left = cross(forward, up);
-      btVector3 velocity = player.object->body->getLinearVelocity();
+      btVector3 velocity = player->object->body->getLinearVelocity();
       btVector3 inputDirection(0,0,0);
-      if (playerInput[LEFT])
+      if (player->input[LEFT])
         {
           inputDirection += btVector3(left.x, left.y, 0.f);
         }
-      if (playerInput[FORWARD])
+      if (player->input[FORWARD])
         {
           inputDirection += btVector3(forward.x, forward.y, 0.f);
         }
-      if (playerInput[RIGHT])
+      if (player->input[RIGHT])
         {
           inputDirection -= btVector3(left.x, left.y, 0.f);
         }
-      if (playerInput[BACK])
+      if (player->input[BACK])
         {
           inputDirection -= btVector3(forward.x, forward.y, 0.f);
         }
       if (inputDirection.length() == 0)
         {
           btTransform t;
-          player.object->body->getMotionState()->getWorldTransform(t);
-          player.object->body->applyForce(btVector3(velocity.x() * breakFactor, velocity.y() * breakFactor, 0),t.getOrigin());
+          player->object->body->getMotionState()->getWorldTransform(t);
+          player->object->body->applyForce(btVector3(velocity.x() * player->breakFactor, velocity.y() * player->breakFactor, 0),t.getOrigin());
         }
       else
         {
           inputDirection = inputDirection.normalize();
-          velocity = btVector3(inputDirection.x() * movementSpeed, inputDirection.y() * movementSpeed, velocity.z());
+          velocity = btVector3(inputDirection.x() * player->movementSpeed, inputDirection.y() * player->movementSpeed, velocity.z());
         }
-      player.object->body->setLinearVelocity(velocity);
+      player->object->body->setLinearVelocity(velocity);
     }
 
     {
       btTransform object, t;
-      if (playerInput[LEFT_CLICK])
+      if (player->input[LEFT_CLICK])
         {
           if (heldObject)
             { // Summon object
-              player.object->body->getMotionState()->getWorldTransform(t);
+              player->object->body->getMotionState()->getWorldTransform(t);
               heldObject->getMotionState()->getWorldTransform(object);
               btVector3 summonTo(forward.x, forward.y, forward.z);
               btVector3 newVelocity = t.getOrigin()+(10*summonTo) - object.getOrigin();
@@ -961,15 +962,15 @@ private:
             heldObject = NULL;
           }
       }
-      if (playerInput[MIDDLE_CLICK])
+      if (player->input[MIDDLE_CLICK])
         {
           if (grappleTarget)
             {
-              player.object->body->getMotionState()->getWorldTransform(t);
+              player->object->body->getMotionState()->getWorldTransform(t);
               btVector3 distance = (grapplePos - t.getOrigin());
               distance *= 2.0;
               if (distance.length() > 10)
-                player.object->body->setLinearVelocity(distance/2.0);
+                player->object->body->setLinearVelocity(distance/2.0);
               return;
             }
           else
@@ -1003,9 +1004,9 @@ private:
         btPersistentManifold* contactManifold =  world->getDispatcher()->getManifoldByIndexInternal(i);
         //const btCollisionObject* obA = contactManifold->getBody0();
         btRigidBody *_p = (btRigidBody*) contactManifold->getBody1();
-        if (_p == player.object->body)
+        if (_p == player->object->body)
           {
-            btVector3 velocity = player.object->body->getLinearVelocity();
+            btVector3 velocity = player->object->body->getLinearVelocity();
             if (fabs(velocity.z()) < 0.1)
               {
                 //player_grounded = true;
@@ -1032,9 +1033,9 @@ private:
             {
               if (collisionBody == bodyInstance)
                 {
-                  if (playerInput[LEFT_CLICK] && collisionBody->getInvMass() != 0)
+                  if (player->input[LEFT_CLICK] && collisionBody->getInvMass() != 0)
                     heldObject = collisionBody;
-                  if (playerInput[MIDDLE_CLICK])
+                  if (player->input[MIDDLE_CLICK])
                     grappleTarget = collisionBody;
                 }
             }
@@ -1044,7 +1045,7 @@ private:
   void spawnCurrentObject() {
     btTransform t;
     t.setIdentity();
-    t.setOrigin(player.object->body->getWorldTransform().getOrigin());
+    t.setOrigin(player->object->body->getWorldTransform().getOrigin());
 
     const float radius = 10;
     t.setOrigin(t.getOrigin() + (btVector3(forward.x, forward.y, forward.z) * radius));
@@ -1081,7 +1082,7 @@ public:
 
   ~Context()
   {
-    delete player.object;
+    delete player->object;
 
     for (int i=world->getNumCollisionObjects()-1; i>=0 ;i--)
       {

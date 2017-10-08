@@ -309,6 +309,14 @@ public:
   }
   string name;
   Object *object;
+  btRigidBody *heldObject = NULL;
+  bool grappleTarget = false;
+  btVector3 grapplePos;
+  float mouseSensitivity = 0.005;
+  double previousX = 0.f;
+  double previousY = 0.f;
+  bool grounded = false;
+  int createObjectIndex = 0;
   float yaw = TWOPI;
   float pitch = TWOPI;
   int input[8] = {0};
@@ -344,19 +352,7 @@ private:
   GLFWwindow* window;
 
   Player *player;
-  float mouseSensitivity = 0.005;
-  double previousX = 0.f;
-  double previousY = 0.f;
-  //bool player_grounded = false;
-
-
-  int createObjIdx = 0;
   shared_ptr<Object> createObj;
-
-  btRigidBody *heldObject = NULL;
-
-  bool grappleTarget = false;
-  btVector3 grapplePos;
 
   mat4 look, projection;
   vec3 eye, forward;
@@ -393,11 +389,11 @@ private:
 
     if(rayCallback.hasHit())
       {
-        if (!grappleTarget)
+        if (!player->grappleTarget)
           {
-            grapplePos.setX(rayCallback.m_hitPointWorld.x());
-            grapplePos.setY(rayCallback.m_hitPointWorld.y());
-            grapplePos.setZ(rayCallback.m_hitPointWorld.z());
+            player->grapplePos.setX(rayCallback.m_hitPointWorld.x());
+            player->grapplePos.setY(rayCallback.m_hitPointWorld.y());
+            player->grapplePos.setZ(rayCallback.m_hitPointWorld.z());
           }
         btRigidBody *obj = (btRigidBody*) rayCallback.m_collisionObject;
         return obj;
@@ -480,15 +476,15 @@ private:
     if (action == GLFW_PRESS) {
       if (key == GLFW_KEY_J)
         {
-          context->createObjIdx++;
-          if (context->createObjIdx + 1 > context->objects.size())
-            context->createObjIdx = 0;
+          context->player->createObjectIndex++;
+          if (context->player->createObjectIndex + 1 > context->objects.size())
+            context->player->createObjectIndex = 0;
         }
       if (key == GLFW_KEY_K)
         {
-          context->createObjIdx--;
-          if (context->createObjIdx < 0)
-            context->createObjIdx = context->objects.size() - 1;
+          context->player->createObjectIndex--;
+          if (context->player->createObjectIndex < 0)
+            context->player->createObjectIndex = context->objects.size() - 1;
         }
       if (key == GLFW_KEY_I)
         {
@@ -509,10 +505,10 @@ private:
   static void glfwMouseCallback(GLFWwindow* window, double x, double y)
   {
     Context *context = static_cast<Context *> (glfwGetWindowUserPointer(window));
-    float pitchMotion = context->mouseSensitivity * (x - context->previousX);
-    float yawMotion = context->mouseSensitivity * (y - context->previousY);
-    context->previousX = x;
-    context->previousY = y;
+    float pitchMotion = context->player->mouseSensitivity * (x - context->player->previousX);
+    float yawMotion = context->player->mouseSensitivity * (y - context->player->previousY);
+    context->player->previousX = x;
+    context->player->previousY = y;
     context->player->yaw += yawMotion;
     // Restrict yaw to avoid inverting Y orientation
     if (context->player->yaw < 4.75 || context->player->yaw > 7.8)
@@ -891,12 +887,6 @@ private:
     position(screenWidth, screenHeight, playerPosition.x(), playerPosition.y(), playerPosition.z());
   }
 
-  void pollInput()
-  {
-  }
-
-
-
   void updatePlayer() {
     {// Orientation
       btVector3 playerOrigin = player->object->body->getWorldTransform().getOrigin();
@@ -945,29 +935,29 @@ private:
       btTransform object, t;
       if (player->input[LEFT_CLICK])
         {
-          if (heldObject)
+          if (player->heldObject)
             { // Summon object
               player->object->body->getMotionState()->getWorldTransform(t);
-              heldObject->getMotionState()->getWorldTransform(object);
+              player->heldObject->getMotionState()->getWorldTransform(object);
               btVector3 summonTo(forward.x, forward.y, forward.z);
               btVector3 newVelocity = t.getOrigin()+(10*summonTo) - object.getOrigin();
-              heldObject->setLinearVelocity(newVelocity * 2.5);
+              player->heldObject->setLinearVelocity(newVelocity * 2.5);
             }
         }
       else {
-        if (heldObject)
+        if (player->heldObject)
           { // Throw object
             const float throwVelocity = 40.f;
-            heldObject->setLinearVelocity(btVector3(forward.x, forward.y, forward.z) * throwVelocity);
-            heldObject = NULL;
+            player->heldObject->setLinearVelocity(btVector3(forward.x, forward.y, forward.z) * throwVelocity);
+            player->heldObject = NULL;
           }
       }
       if (player->input[MIDDLE_CLICK])
         {
-          if (grappleTarget)
+          if (player->grappleTarget)
             {
               player->object->body->getMotionState()->getWorldTransform(t);
-              btVector3 distance = (grapplePos - t.getOrigin());
+              btVector3 distance = (player->grapplePos - t.getOrigin());
               distance *= 2.0;
               if (distance.length() > 10)
                 player->object->body->setLinearVelocity(distance/2.0);
@@ -977,7 +967,7 @@ private:
             return;
 
         } else {
-        grappleTarget = false;
+        player->grappleTarget = false;
       }
 
       {
@@ -985,7 +975,7 @@ private:
         int i = 0;
         for (auto &o : objects)
           {
-            if (i++ == createObjIdx)
+            if (i++ == player->createObjectIndex)
               {
                 createObj = o.second;
                 break;
@@ -1009,7 +999,7 @@ private:
             btVector3 velocity = player->object->body->getLinearVelocity();
             if (fabs(velocity.z()) < 0.1)
               {
-                //player_grounded = true;
+                //player->grounded = true;
               }
           }
 
@@ -1026,7 +1016,7 @@ private:
           }
       }
     btRigidBody *collisionBody = RayTrace(screenWidth/2, screenHeight/2);
-    if (collisionBody && !heldObject)
+    if (collisionBody && !player->heldObject)
       {
         for (auto &o : objects)
           for (btRigidBody *bodyInstance : o.second->bodies)
@@ -1034,9 +1024,9 @@ private:
               if (collisionBody == bodyInstance)
                 {
                   if (player->input[LEFT_CLICK] && collisionBody->getInvMass() != 0)
-                    heldObject = collisionBody;
+                    player->heldObject = collisionBody;
                   if (player->input[MIDDLE_CLICK])
-                    grappleTarget = collisionBody;
+                    player->grappleTarget = collisionBody;
                 }
             }
       }

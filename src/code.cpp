@@ -359,7 +359,7 @@ private:
 
   GLuint staticShader;
 
-  btRigidBody *RayTrace(int x, int y)
+  btRigidBody *rayCast(int x, int y)
   {
     vec4 ray_start_NDC( ((float)x/(float)screenWidth  - 0.5f) * 2.0f, ((float)y/(float)screenHeight - 0.5f) * 2.0f, -1.0, 1.0f);
     vec4 ray_end_NDC( ((float)x/(float)screenWidth  - 0.5f) * 2.0f, ((float)y/(float)screenHeight - 0.5f) * 2.0f, 0.0, 1.0f);
@@ -884,7 +884,8 @@ private:
 
   void drawUI()  {
     btVector3 playerPosition = player->object->body->getWorldTransform().getOrigin();
-    position(screenWidth, screenHeight, playerPosition.x(), playerPosition.y(), playerPosition.z());
+    uiPosition(screenWidth, screenHeight, playerPosition.x(), playerPosition.y(), playerPosition.z());
+    uiObject(screenWidth, screenHeight, createObj->name.c_str());
   }
 
   void updatePlayer() {
@@ -1015,7 +1016,7 @@ private:
               }
           }
       }
-    btRigidBody *collisionBody = RayTrace(screenWidth/2, screenHeight/2);
+    btRigidBody *collisionBody = rayCast(screenWidth/2, screenHeight/2);
     if (collisionBody && !player->heldObject)
       {
         for (auto &o : objects)
@@ -1086,7 +1087,6 @@ public:
         delete obj;
       }
     destroyFreetype();
-    //SDL_Quit();
   }
 
 

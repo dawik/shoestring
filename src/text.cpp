@@ -66,7 +66,7 @@ int initFreetype() {
   return 1;
 }
 
-void renderText_text(const char *text, atlas * a, float x, float y, float sx, float sy) {
+void renderText(const char *text, atlas * a, float x, float y, float sx, float sy) {
   const uint8_t *p;
 
   glBindTexture(GL_TEXTURE_2D, a->tex);
@@ -111,7 +111,7 @@ void renderText_text(const char *text, atlas * a, float x, float y, float sx, fl
   glDisableVertexAttribArray(attribute_coord);
 }
 
-void position(float wx, float wy, float x, float y, float z) {
+void uiPosition(float wx, float wy, float x, float y, float z) {
   float sx = 2.0 / wx;
   float sy = 2.0 / wy;
 
@@ -126,9 +126,29 @@ void position(float wx, float wy, float x, float y, float z) {
   char buff[128];
   snprintf(buff, sizeof(buff), "[%f %f %f]", x, y, z);
   glUniform4fv(uniform_color, 1, red);
-  renderText_text(buff, a, -1 + 8 * sx, 1 - 50 * sy, sx, sy);
+  renderText(buff, a, -1 + 8 * sx, 1 - 50 * sy, sx, sy);
   glDisable(GL_BLEND);
 }
+
+void uiObject(float wx, float wy, const char *str) {
+  float sx = 2.0 / wx;
+  float sy = 2.0 / wy;
+
+  glUseProgram(program);
+  glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+  GLfloat black[4] = { 0, 0, 0, 1 };
+  GLfloat red[4] = { 1, 0, 0, 1 };
+
+  glUniform4fv(uniform_color, 1, black);
+
+  char buff[128];
+  snprintf(buff, sizeof(buff), "%s", str);
+  glUniform4fv(uniform_color, 1, red);
+  renderText(buff, a, -1 + 8 * sx, 1 - 150 * sy, sx, sy);
+  glDisable(GL_BLEND);
+}
+
 
 void destroyFreetype() {
   glDeleteProgram(program);

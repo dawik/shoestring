@@ -258,15 +258,7 @@ public:
 
             glUniformMatrix4fv (glGetUniformLocation (mesh->shader, "model"), 1, GL_FALSE, mat);
 
-            if (name == "Sky" == 0)
-              {
-                glDisable(GL_CULL_FACE);
-              }
             glDrawElements( GL_TRIANGLES, (mesh->elements.size()), GL_UNSIGNED_INT, NULL);
-            if (name == "Sky" == 0)
-              {
-                glEnable(GL_CULL_FACE);
-              }
           }
 
         if (opt.selected)
@@ -839,7 +831,6 @@ private:
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glClearColor(0,0,0,0);
-    glEnable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
     glCullFace(GL_FRONT);
     glDepthMask(GL_TRUE);
@@ -876,7 +867,6 @@ private:
         createObj->drawBufferr(opt, &defaultMaterial);
     }
 
-    glDisable(GL_CULL_FACE);
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_TEXTURE_2D);
     glDisable(GL_BLEND);

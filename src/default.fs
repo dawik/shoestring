@@ -1,86 +1,138 @@
-#version 150
-
-uniform struct Light {
-   vec3 position;
-   vec3 intensities;
-   float attenuation;
-   float ambientCoefficient;
-} light;
-
-uniform mat4 model;
-uniform mat4 camera;
-uniform mat4 projection;
-uniform vec4 color;
-uniform int texid;
-uniform int isHighlighted;
-uniform sampler2D tex;
-
-uniform vec3 cameraPosition;
-uniform float materialShininess;
-uniform vec3 materialSpecularColor;
-
-uniform int sky;
-
-in vec3 vertexFrag;
-in vec3 normalFrag;
+#version 330 core
+out vec4 FragColor;
+in vec2 TexCoords; 
+in vec3 WorldPos;
+in vec3 Normal;
 in vec2 uvFrag;
 
-out vec4 finalColor;
+uniform sampler2D tex;
 
-void main() 
+// material parameters
+const vec3 albedo = vec3(0.5,0.0,0.0);
+const float metallic = 0.0025f;
+const float roughness = 0.5f;
+const float ao = 1.0f;
+
+// lights
+//uniform vec3 lightPositions[4];
+//uniform vec3 lightColors[4];
+const vec3 lightPositions[4] = vec3[](
+	vec3(-10.0f,  10.0f, 10.0f),
+	vec3( 10.0f,  10.0f, 10.0f),
+	vec3(-10.0f, -10.0f, 10.0f),
+	vec3( 10.0f, -10.0f, 10.0f)
+);
+const vec3 lightColors[4] = vec3[](
+	vec3(255,255,255),
+	vec3(255,255,255),
+	vec3(255,255,255),
+	vec3(255,255,255)
+);
+
+
+uniform vec3 camPos;
+
+const float PI = 3.14159265359;
+// ----------------------------------------------------------------------------
+float DistributionGGX(vec3 N, vec3 H, float roughness)
 {
-    vec3 normal = normalize(transpose(inverse(mat3(model))) * normalFrag); 
-    //normal = normalFrag;
-    vec3 surfacePos = vec3(model * vec4(vertexFrag, 1));
-    vec4 surfaceColor = texid > 0 ? texture(tex, uvFrag) : color;
-    vec3 surfaceToLight = normalize(light.position - surfacePos);
-    vec3 surfaceToCamera = normalize(cameraPosition - surfacePos);
-    
-    //ambient
-    vec3 ambient = light.ambientCoefficient * surfaceColor.rgb * light.intensities;
+    float a = roughness*roughness;
+    float a2 = a*a;
+    float NdotH = max(dot(N, H), 0.0);
+    float NdotH2 = NdotH*NdotH;
 
-    //diffuse
-    float diffuseCoefficient = max(0.0, dot(normal, surfaceToLight));
-    vec3 diffuse = diffuseCoefficient * surfaceColor.rgb * light.intensities;
+    float nom   = a2;
+    float denom = (NdotH2 * (a2 - 1.0) + 1.0);
+    denom = PI * denom * denom;
 
-    //specular
-    float specularCoefficient = 0.3;
-    specularCoefficient = pow(max(0.0, dot(surfaceToCamera, reflect(-surfaceToLight, normal))), materialShininess);
-    vec3 specular = specularCoefficient * materialSpecularColor * light.intensities;
-    
-    //attenuation
-    float distanceToLight = length(light.position - surfacePos);
-    float attenuation = 1.0 / (1.0 + light.attenuation * pow(distanceToLight, 2));
+    return nom / max(denom, 0.001); // prevent divide by zero for roughness=0.0 and NdotH=1.0
+}
+// ----------------------------------------------------------------------------
+float GeometrySchlickGGX(float NdotV, float roughness)
+{
+    float r = (roughness + 1.0);
+    float k = (r*r) / 8.0;
 
-    //linear color (color before gamma correction)
-    //vec3 linearColor = ambient + attenuation*(diffuse + specular); // Specular buggy
-    vec3 linearColor = ambient + attenuation*(diffuse);
-    
-    //final color (after gamma correction)
-    vec3 gamma = vec3(1.0/2.2);
+    float nom   = NdotV;
+    float denom = NdotV * (1.0 - k) + k;
 
-    vec4 tv = camera * model * vec4(vertexFrag,1);
+    return nom / denom;
+}
+// ----------------------------------------------------------------------------
+float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness)
+{
+    float NdotV = max(dot(N, V), 0.0);
+    float NdotL = max(dot(N, L), 0.0);
+    float ggx2 = GeometrySchlickGGX(NdotV, roughness);
+    float ggx1 = GeometrySchlickGGX(NdotL, roughness);
 
-    const float crossRadius = 0.003;
-    float d = sqrt(pow(tv.x/tv.z, 2) + pow(tv.y/tv.z, 2));
-    if (sky != 0)
+    return ggx1 * ggx2;
+}
+// ----------------------------------------------------------------------------
+vec3 fresnelSchlick(float cosTheta, vec3 F0)
+{
+    return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
+}
+// ----------------------------------------------------------------------------
+void main()
+{		
+    vec3 N = normalize(Normal);
+    vec3 V = normalize(camPos - WorldPos);
+
+    // calculate reflectance at normal incidence; if dia-electric (like plastic) use F0 
+    // of 0.04 and if it's a metal, use the albedo color as F0 (metallic workflow)    
+    vec3 F0 = vec3(0.04); 
+    F0 = mix(F0, albedo, metallic);
+
+    // reflectance equation
+    vec3 Lo = vec3(0.0);
+    for(int i = 0; i < 4; ++i) 
     {
-            finalColor = surfaceColor;
-            finalColor.rgb * gamma;
-            finalColor.rgb * gamma;
-            finalColor.r = 0.1;
-    }
-    else if (d < crossRadius)
-            finalColor = vec4(0.75,0,0,0.1);
-    else
-    {
-            finalColor = vec4(pow(linearColor, gamma), surfaceColor.a);
-            if (isHighlighted > 0)
-            {
-                    finalColor = color;
-                    finalColor.a = 0.5;
-            }
-    }
+        // calculate per-light radiance
+        vec3 L = normalize(lightPositions[i] - WorldPos);
+        vec3 H = normalize(V + L);
+        float distance = length(lightPositions[i] - WorldPos);
+        float attenuation = 1.0 / (distance * distance);
+        vec3 radiance = lightColors[i] * attenuation;
 
-    //finalColor = vec4(finalColor.xyz*0.01 + normalFrag, 1.0);
+        // Cook-Torrance BRDF
+        float NDF = DistributionGGX(N, H, roughness);   
+        float G   = GeometrySmith(N, V, L, roughness);      
+        vec3 F    = fresnelSchlick(clamp(dot(H, V), 0.0, 1.0), F0);
+           
+        vec3 nominator    = NDF * G * F; 
+        float denominator = 4 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0);
+        vec3 specular = nominator / max(denominator, 0.001); // prevent divide by zero for NdotV=0.0 or NdotL=0.0
+        
+        // kS is equal to Fresnel
+        vec3 kS = F;
+        // for energy conservation, the diffuse and specular light can't
+        // be above 1.0 (unless the surface emits light); to preserve this
+        // relationship the diffuse component (kD) should equal 1.0 - kS.
+        vec3 kD = vec3(1.0) - kS;
+        // multiply kD by the inverse metalness such that only non-metals 
+        // have diffuse lighting, or a linear blend if partly metal (pure metals
+        // have no diffuse light).
+        kD *= 1.0 - metallic;	  
+
+        // scale light by NdotL
+        float NdotL = max(dot(N, L), 0.0);        
+
+        // add to outgoing radiance Lo
+        Lo += (kD * albedo / PI + specular) * radiance * NdotL;  // note that we already multiplied the BRDF by the Fresnel (kS) so we won't multiply by kS again
+    }   
+    
+    // ambient lighting (note that the next IBL tutorial will replace 
+    // this ambient lighting with environment lighting).
+    vec3 ambient = vec3(0.03) * albedo * ao;
+
+    vec4 surfaceColor = texture(tex, uvFrag);
+    vec3 color = (surfaceColor.rgb * 0.3) + ambient + Lo;
+
+    // HDR tonemapping
+    color = color / (color + vec3(1.0));
+    // gamma correct
+    color = pow(color, vec3(1.0/2.2)); 
+
+    FragColor = vec4(color, 1.0);
 }

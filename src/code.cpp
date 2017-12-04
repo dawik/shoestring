@@ -845,9 +845,9 @@ private:
     glDepthMask(GL_TRUE);
 
     {
-      glUniformMatrix4fv(glGetUniformLocation (staticShader, "camera"), 1, GL_FALSE, value_ptr(look));
+      glUniformMatrix4fv(glGetUniformLocation (staticShader, "view"), 1, GL_FALSE, value_ptr(look));
       glUniformMatrix4fv(glGetUniformLocation (staticShader, "projection"), 1, GL_FALSE, value_ptr(projection));
-      glUniform3f(glGetUniformLocation (staticShader, "cameraPosition"), eye.x, eye.y, eye.z);
+      glUniform3f(glGetUniformLocation (staticShader, "campPos"), eye.x, eye.y, eye.z);
     }
 
     for (const auto &object : objects)

@@ -8,9 +8,9 @@ in vec2 uvFrag;
 uniform sampler2D tex;
 
 // material parameters
-const vec3 albedo = vec3(0.5,0.0,0.0);
+const vec3 albedo = vec3(0.075,0.075,0.075);
 const float metallic = 0.0025f;
-const float roughness = 0.5f;
+const float roughness = 1.0f;
 const float ao = 1.0f;
 
 // lights
@@ -23,10 +23,10 @@ const vec3 lightPositions[4] = vec3[](
 	vec3( 10.0f, -10.0f, 10.0f)
 );
 const vec3 lightColors[4] = vec3[](
-	vec3(255,255,255),
-	vec3(255,255,255),
-	vec3(255,255,255),
-	vec3(255,255,255)
+	vec3(255f,255f,255f),
+	vec3(255f,255f,255f),
+	vec3(255f,255f,255f),
+	vec3(255f,255f,255f)
 );
 
 
@@ -127,7 +127,7 @@ void main()
     vec3 ambient = vec3(0.03) * albedo * ao;
 
     vec4 surfaceColor = texture(tex, uvFrag);
-    vec3 color = (surfaceColor.rgb * 0.3) + ambient + Lo;
+    vec3 color = (surfaceColor.rgb * 0.25) + ((ambient + Lo) * 0.75);
 
     // HDR tonemapping
     color = color / (color + vec3(1.0));

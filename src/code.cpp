@@ -308,7 +308,7 @@ public:
   double previousX = 0.f;
   double previousY = 0.f;
   bool grounded = false;
-  int createObjectIndex = 0;
+  int createObjectIndex = -1;
   int input[8] = {0};
   float yaw = TWOPI;
   float pitch = TWOPI;
@@ -337,6 +337,8 @@ private:
   unordered_map<string, shared_ptr<Object>> objects;
   vector<Instance> addedInstances;
 
+  int frames = 0;
+  double fps;
 
   int screenWidth;
   int screenHeight;
@@ -457,7 +459,7 @@ private:
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
       glfwSetWindowShouldClose(window, 1);
     }
-    if (key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
+    if (key == GLFW_KEY_SPACE && action == GLFW_PRESS && context->player->createObjectIndex >= 0) {
       context->spawnCurrentObject();
     }
     context->player->input[FORWARD] = key == GLFW_KEY_W ? action : context->player->input[FORWARD];
@@ -469,12 +471,12 @@ private:
         {
           context->player->createObjectIndex++;
           if (context->player->createObjectIndex + 1 > context->objects.size())
-            context->player->createObjectIndex = 0;
+            context->player->createObjectIndex = -1;
         }
       if (key == GLFW_KEY_K)
         {
           context->player->createObjectIndex--;
-          if (context->player->createObjectIndex < 0)
+          if (context->player->createObjectIndex < -1)
             context->player->createObjectIndex = context->objects.size() - 1;
         }
       if (key == GLFW_KEY_I)
@@ -850,20 +852,21 @@ private:
       }
 
     {
-      const float summonDistance = 10.0;
+      if (createObj) {
+        const float summonDistance = 10.0;
 
-      btTransform t;
-      t.setIdentity();
-      t.setOrigin(player->object->body->getWorldTransform().getOrigin());
-      t.setOrigin(t.getOrigin() + btVector3(forward.x * summonDistance,
-                                            forward.y * summonDistance,
-                                            forward.z * summonDistance));
-      t.setOrigin(btVector3(round(t.getOrigin().x()),round(t.getOrigin().y()), round(t.getOrigin().z())));
-      opt.camera = t;
-      opt.selected = true;
+        btTransform t;
+        t.setIdentity();
+        t.setOrigin(player->object->body->getWorldTransform().getOrigin());
+        t.setOrigin(t.getOrigin() + btVector3(forward.x * summonDistance,
+                                              forward.y * summonDistance,
+                                              forward.z * summonDistance));
+        t.setOrigin(btVector3(round(t.getOrigin().x()),round(t.getOrigin().y()), round(t.getOrigin().z())));
+        opt.camera = t;
+        opt.selected = true;
 
-      if (createObj)
         createObj->drawBufferr(opt, &defaultMaterial);
+      }
     }
 
     glDisable(GL_DEPTH_TEST);
@@ -874,11 +877,11 @@ private:
   void drawUI()  {
     char buff[128];
     btVector3 playerPosition = player->object->body->getWorldTransform().getOrigin();
-    snprintf(buff, sizeof(buff), "FPS: %f", 1.f);
+    snprintf(buff, sizeof(buff), "FPS: %f", fps);
     uiText(0, screenWidth, screenHeight, buff);
     snprintf(buff, sizeof(buff), "Position: [%f %f %f]", playerPosition.x(), playerPosition.y(), playerPosition.z());
     uiText(1, screenWidth, screenHeight, buff);
-    snprintf(buff, sizeof(buff), "Creating object: %s", createObj->name.c_str());
+    snprintf(buff, sizeof(buff), "Creating object: %s", createObj ? createObj->name.c_str() : "nothing");
     uiText(2, screenWidth, screenHeight, buff);
   }
 
@@ -954,6 +957,7 @@ private:
       {
 
         int i = 0;
+        createObj = nullptr;
         for (auto &o : objects)
           {
             if (i++ == player->createObjectIndex)
@@ -1082,6 +1086,13 @@ public:
         drawUI();
         glfwPollEvents();
         glfwSwapBuffers(window);
+        frames++;
+        const double time = glfwGetTime();
+        if (time  > 1.0) {
+          fps = frames / time;
+          frames = 0;
+          glfwSetTime(0.f);
+        }
       }
   }
 

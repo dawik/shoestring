@@ -123,8 +123,5 @@ struct atlas {
 };
 
 int initFreetype();
-void renderText(const char *text, atlas * a, float x, float y, float sx, float sy);
 void destroyFreetype();
-void display(float wx, float wy);
-void uiPosition(float wx, float wy, float x, float y, float z);
-void uiObject(float wx, float wy, const char *str);
+void uiText(int row, float wx, float wy, const char *str);

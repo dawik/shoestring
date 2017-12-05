@@ -873,9 +873,17 @@ private:
   }
 
   void drawUI()  {
+    //uiPosition(screenWidth, screenHeight, playerPosition.x(), playerPosition.y(), playerPosition.z());
+    //uiObject(screenWidth, screenHeight, createObj->name.c_str());
+
+    char buff[128];
     btVector3 playerPosition = player->object->body->getWorldTransform().getOrigin();
-    uiPosition(screenWidth, screenHeight, playerPosition.x(), playerPosition.y(), playerPosition.z());
-    uiObject(screenWidth, screenHeight, createObj->name.c_str());
+    snprintf(buff, sizeof(buff), "FPS: %f", 1.f);
+    uiText(0, screenWidth, screenHeight, buff);
+    snprintf(buff, sizeof(buff), "Position: [%f %f %f]", playerPosition.x(), playerPosition.y(), playerPosition.z());
+    uiText(1, screenWidth, screenHeight, buff);
+    snprintf(buff, sizeof(buff), "Creating object: %s", createObj->name.c_str());
+    uiText(2, screenWidth, screenHeight, buff);
   }
 
   void updatePlayer() {

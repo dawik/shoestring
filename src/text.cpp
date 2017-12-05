@@ -31,6 +31,8 @@ static FT_Face face;
 
 const char *fontfilename = "assets/terminus.ttf";
 
+const int font_size = 64;
+
 atlas *a;
 
 int initFreetype() {
@@ -61,12 +63,12 @@ int initFreetype() {
 
   glGenBuffers(1, &vbo);
 
-  a = new atlas(face, 64);
+  a = new atlas(face, font_size);
 
   return 1;
 }
 
-void renderText(const char *text, atlas * a, float x, float y, float sx, float sy) {
+void drawText(const char *text, atlas * a, float x, float y, float sx, float sy) {
   const uint8_t *p;
 
   glBindTexture(GL_TEXTURE_2D, a->tex);
@@ -111,7 +113,7 @@ void renderText(const char *text, atlas * a, float x, float y, float sx, float s
   glDisableVertexAttribArray(attribute_coord);
 }
 
-void uiPosition(float wx, float wy, float x, float y, float z) {
+void uiText(int row, float wx, float wy, const char *str) {
   float sx = 2.0 / wx;
   float sy = 2.0 / wy;
 
@@ -123,31 +125,11 @@ void uiPosition(float wx, float wy, float x, float y, float z) {
 
   glUniform4fv(uniform_color, 1, black);
 
-  char buff[128];
-  snprintf(buff, sizeof(buff), "[%f %f %f]", x, y, z);
   glUniform4fv(uniform_color, 1, red);
-  renderText(buff, a, -1 + 8 * sx, 1 - 50 * sy, sx, sy);
+  drawText(str, a, -1 + 8 * sx, 1 - (font_size + font_size * row) * sy, sx, sy);
   glDisable(GL_BLEND);
 }
 
-void uiObject(float wx, float wy, const char *str) {
-  float sx = 2.0 / wx;
-  float sy = 2.0 / wy;
-
-  glUseProgram(program);
-  glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-  GLfloat black[4] = { 0, 0, 0, 1 };
-  GLfloat red[4] = { 1, 0, 0, 1 };
-
-  glUniform4fv(uniform_color, 1, black);
-
-  char buff[128];
-  snprintf(buff, sizeof(buff), "%s", str);
-  glUniform4fv(uniform_color, 1, red);
-  renderText(buff, a, -1 + 8 * sx, 1 - 150 * sy, sx, sy);
-  glDisable(GL_BLEND);
-}
 
 
 void destroyFreetype() {

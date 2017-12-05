@@ -309,9 +309,9 @@ public:
   double previousY = 0.f;
   bool grounded = false;
   int createObjectIndex = 0;
+  int input[8] = {0};
   float yaw = TWOPI;
   float pitch = TWOPI;
-  int input[8] = {0};
   float mass = 1.0;
   float height = 2.0;
   float radius = 2.0;
@@ -334,7 +334,6 @@ private:
   vector<Material> materials;
   vector<Camera> cameras;
   unordered_map<string, shared_ptr<Mesh>> meshes;
-
   unordered_map<string, shared_ptr<Object>> objects;
   vector<Instance> addedInstances;
 
@@ -873,9 +872,6 @@ private:
   }
 
   void drawUI()  {
-    //uiPosition(screenWidth, screenHeight, playerPosition.x(), playerPosition.y(), playerPosition.z());
-    //uiObject(screenWidth, screenHeight, createObj->name.c_str());
-
     char buff[128];
     btVector3 playerPosition = player->object->body->getWorldTransform().getOrigin();
     snprintf(buff, sizeof(buff), "FPS: %f", 1.f);
@@ -887,36 +883,21 @@ private:
   }
 
   void updatePlayer() {
-    {// Orientation
+    {
       btVector3 playerOrigin = player->object->body->getWorldTransform().getOrigin();
-
       eye = vec3(playerOrigin.x(), playerOrigin.y(), playerOrigin.z());
       forward = vec3( cos(player->yaw)*sin(player->pitch), cos(player->yaw) * cos(player->pitch), sin(player->yaw) );
-
       look =  lookAt(eye, eye + (forward * float(5.0)), up);
-    }
-
-    { // Velocity
       vec3 left = cross(forward, up);
       btVector3 velocity = player->object->body->getLinearVelocity();
-      btVector3 inputDirection(0,0,0);
-      if (player->input[LEFT])
-        {
-          inputDirection += btVector3(left.x, left.y, 0.f);
-        }
-      if (player->input[FORWARD])
-        {
-          inputDirection += btVector3(forward.x, forward.y, 0.f);
-        }
-      if (player->input[RIGHT])
-        {
-          inputDirection -= btVector3(left.x, left.y, 0.f);
-        }
-      if (player->input[BACK])
-        {
-          inputDirection -= btVector3(forward.x, forward.y, 0.f);
-        }
-      if (inputDirection.length() == 0)
+      btVector3 direction(0,0,0);
+
+      direction = player->input[LEFT] ? direction + btVector3(left.x, left.y, 0.f) : direction;
+      direction = player->input[FORWARD] ? direction + btVector3(forward.x, forward.y, 0.f) : direction;
+      direction = player->input[RIGHT] ? direction - btVector3(left.x, left.y, 0.f) : direction;
+      direction = player->input[BACK] ? direction - btVector3(forward.x, forward.y, 0.f) : direction;
+
+      if (direction.length() == 0)
         {
           btTransform t;
           player->object->body->getMotionState()->getWorldTransform(t);
@@ -924,9 +905,10 @@ private:
         }
       else
         {
-          inputDirection = inputDirection.normalize();
-          velocity = btVector3(inputDirection.x() * player->movementSpeed, inputDirection.y() * player->movementSpeed, velocity.z());
+          direction = direction.normalize();
+          velocity = btVector3(direction.x() * player->movementSpeed, direction.y() * player->movementSpeed, velocity.z());
         }
+
       player->object->body->setLinearVelocity(velocity);
     }
 

@@ -881,7 +881,7 @@ private:
     uiText(0, screenWidth, screenHeight, buff);
     snprintf(buff, sizeof(buff), "Position: [%f %f %f]", playerPosition.x(), playerPosition.y(), playerPosition.z());
     uiText(1, screenWidth, screenHeight, buff);
-    snprintf(buff, sizeof(buff), "Creating object: %s", createObj ? createObj->name.c_str() : "nothing");
+    snprintf(buff, sizeof(buff), "Object: %s", createObj ? createObj->name.c_str() : "J K to select");
     uiText(2, screenWidth, screenHeight, buff);
   }
 

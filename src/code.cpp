@@ -251,15 +251,18 @@ public:
             glDisable(GL_TEXTURE_2D);
           }
 
-        for (btRigidBody *b : bodies)
+        float mats[bodies.size()][16];
+        float *p;
+        p = &mats[0][0];
+        for (btRigidBody *body : bodies)
           {
-            b->getMotionState()->getWorldTransform(t);
+            body->getMotionState()->getWorldTransform(t);
             t.getOpenGLMatrix(mat);
-
-            glUniformMatrix4fv (glGetUniformLocation (mesh->shader, "model"), 1, GL_FALSE, mat);
-
-            glDrawElements( GL_TRIANGLES, (mesh->elements.size()), GL_UNSIGNED_INT, NULL);
+            memcpy(p, mat, sizeof(mat));
+            p += 16;
           }
+        glUniformMatrix4fv (glGetUniformLocation (mesh->shader, "model"), bodies.size(), GL_FALSE, (float*)&mats);
+        glDrawElementsInstanced( GL_TRIANGLES, (mesh->elements.size()), GL_UNSIGNED_INT, NULL, bodies.size());
 
         if (opt.selected)
           {

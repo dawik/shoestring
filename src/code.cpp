@@ -264,7 +264,6 @@ public:
           {
             body->getMotionState()->getWorldTransform(t);
             t.getOpenGLMatrix(p);
-            //memcpy(p, mat, sizeof(mat));
             p += 16;
           }
         glUniformMatrix4fv (glGetUniformLocation (mesh->shader, "model"), bodies.size(), GL_FALSE, (float*)&mats);
@@ -322,6 +321,7 @@ public:
   bool grappleTarget = false;
   btVector3 grapplePos;
   float mouseSensitivity = 0.005;
+  double previousMousePosition[2] = { 0.f, 0.f };
   double previousX = 0.f;
   double previousY = 0.f;
   bool grounded = false;
@@ -515,10 +515,10 @@ private:
   static void glfwMouseCallback(GLFWwindow* window, double x, double y)
   {
     Context *context = static_cast<Context *> (glfwGetWindowUserPointer(window));
-    float pitchMotion = context->player->mouseSensitivity * (x - context->player->previousX);
-    float yawMotion = context->player->mouseSensitivity * (y - context->player->previousY);
-    context->player->previousX = x;
-    context->player->previousY = y;
+    float pitchMotion = context->player->mouseSensitivity * (x - context->player->previousMousePosition[0]);
+    float yawMotion = context->player->mouseSensitivity * (y - context->player->previousMousePosition[1]);
+    context->player->previousMousePosition[0] = x;
+    context->player->previousMousePosition[1] = y;
     context->player->yaw += yawMotion;
     // Restrict yaw to avoid inverting Y orientation
     if (context->player->yaw < 4.75 || context->player->yaw > 7.8)

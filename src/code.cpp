@@ -53,7 +53,7 @@ class Material
   friend Context;
 private:
   string name;
-  int texture;
+  unsigned int texture;
   string bitmap_file;
   float shininess = 0.1;
   float diffuse[4] = {1,1,1,1};
@@ -67,17 +67,19 @@ class Mesh
 private:
   vector<float> vertexdata;
   vector<unsigned int> elements;
-  unsigned int numElements, vao, vbo, ebo, material_idx;
+  unsigned int numElements, vao, vbo, ebo, tbo, tbo_tex, material_idx;
   GLuint shader;
   bool hasTexture, hasAnimations;
   unsigned int texture;
 public:
+  string name;
   Mesh() : hasTexture(false), hasAnimations(false) {};
 
   ~Mesh() {};
 
   void init(GLuint _shader)
   {
+
     shader = _shader;
     size_t stride = hasTexture ? sizeof(float) * 8 : sizeof(float) * 6;
     GLint vertexAttrib = glGetAttribLocation (shader, "vertex");
@@ -85,7 +87,7 @@ public:
     GLint uvAttrib = glGetAttribLocation (shader, "uv");
     glGenBuffers (1, &vbo);
     glBindBuffer (GL_ARRAY_BUFFER, vbo);
-    glBufferData (GL_ARRAY_BUFFER, sizeof (float) * vertexdata.size(), &vertexdata[0], GL_STREAM_DRAW);
+    glBufferData (GL_ARRAY_BUFFER, sizeof (float) * vertexdata.size(), &vertexdata[0], GL_STATIC_DRAW);
 
     glGenVertexArrays (1, &vao);
     glBindVertexArray (vao);
@@ -105,6 +107,10 @@ public:
     glGenBuffers(1, &ebo);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, (elements.size()) * sizeof(unsigned int), &elements[0], GL_STATIC_DRAW);
+
+    glGenBuffers(1, &tbo);
+
+    glGenTextures(1, &tbo_tex);
 
     glBindVertexArray (0);
 
@@ -239,10 +245,10 @@ public:
         glUniform1f(glGetUniformLocation (mesh->shader, "materialShininess"), material->shininess);
         glUniform3f(glGetUniformLocation (mesh->shader, "materialSpecularColor"), material->specular[0],material->specular[0],material->specular[0]);
 
+        glActiveTexture(GL_TEXTURE2);
         if (mesh->hasTexture)
           {
             glEnable(GL_TEXTURE_2D);
-            glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, mesh->texture);
           }
         else
@@ -257,11 +263,18 @@ public:
         for (btRigidBody *body : bodies)
           {
             body->getMotionState()->getWorldTransform(t);
-            t.getOpenGLMatrix(mat);
-            memcpy(p, mat, sizeof(mat));
+            t.getOpenGLMatrix(p);
+            //memcpy(p, mat, sizeof(mat));
             p += 16;
           }
         glUniformMatrix4fv (glGetUniformLocation (mesh->shader, "model"), bodies.size(), GL_FALSE, (float*)&mats);
+        glActiveTexture(GL_TEXTURE5);
+        glBindTexture(GL_TEXTURE_BUFFER, mesh->tbo_tex);
+        glBindBuffer(GL_TEXTURE_BUFFER, mesh->tbo);
+        glBufferData(GL_TEXTURE_BUFFER, sizeof(mat) * bodies.size(), &mats, GL_DYNAMIC_DRAW);
+        glTexBuffer(GL_TEXTURE_BUFFER, GL_RGBA32F, mesh->tbo);
+        glUniform1i(glGetUniformLocation(mesh->shader, "tex"), 2);
+        glUniform1i(glGetUniformLocation(mesh->shader, "u_tbo_tex"), 5);
         glDrawElementsInstanced( GL_TRIANGLES, (mesh->elements.size()), GL_UNSIGNED_INT, NULL, bodies.size());
 
         if (opt.selected)
@@ -277,6 +290,7 @@ public:
       } else {
       printf("No mesh for %s\n", name.c_str());
     }
+    gl_error();
   };
 };
 
@@ -760,7 +774,8 @@ private:
         mesh->hasAnimations = true;
       }
 
-    meshes[string(AIMesh->mName.C_Str())] = mesh;
+    mesh->name = string(AIMesh->mName.C_Str());
+    meshes[mesh->name] = mesh;
   };
 
   void AddMaterial(const struct aiMaterial *AIMaterial)
@@ -792,7 +807,8 @@ private:
           }
       }
     else
-      material.texture = -1;
+      material.texture = 66;
+    printf("SKroutt C %d\n", material.texture);
     aiString _n;
     AIMaterial->Get(AI_MATKEY_NAME, _n);
     AIMaterial->Get(AI_MATKEY_COLOR_DIFFUSE,material.diffuse);
@@ -880,9 +896,9 @@ private:
   void drawUI()  {
     char buff[128];
     btVector3 playerPosition = player->object->body->getWorldTransform().getOrigin();
-    snprintf(buff, sizeof(buff), "FPS: %f", fps);
+    snprintf(buff, sizeof(buff), "FPS: %.1f", fps);
     uiText(0, screenWidth, screenHeight, buff);
-    snprintf(buff, sizeof(buff), "Position: [%f %f %f]", playerPosition.x(), playerPosition.y(), playerPosition.z());
+    snprintf(buff, sizeof(buff), "Position: [%.1f %.1f %.1f]", playerPosition.x(), playerPosition.y(), playerPosition.z());
     uiText(1, screenWidth, screenHeight, buff);
     snprintf(buff, sizeof(buff), "Object: %s", createObj ? createObj->name.c_str() : "J K to select");
     uiText(2, screenWidth, screenHeight, buff);
@@ -1034,8 +1050,8 @@ private:
 
   void spawnStuff() {
     int x, y;
-    for (y = 0; y < 16; y++) {
-      for (x = 0; x < 16; x++) {
+    for (y = 0; y < 100; y++) {
+      for (x = 0; x < 100; x++) {
         btTransform t;
         t.setIdentity();
         t.setOrigin(btVector3(x*2,y*2,0));
@@ -1056,6 +1072,7 @@ public:
     initPhysics();
     initRigidBodies();
     spawnStuff();
+    glGetError();
   }
 
   ~Context()

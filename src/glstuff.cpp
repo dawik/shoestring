@@ -43,6 +43,7 @@ GLuint load_texture(char *file)
   if (n == 3) { intfmt = fmt = GL_RGB; }
   if (n == 4) { intfmt = fmt = GL_RGBA; }
 
+  glActiveTexture(GL_TEXTURE2);
   glGenTextures(1, &texture);
   glBindTexture(GL_TEXTURE_2D, texture);
   glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_TRUE);

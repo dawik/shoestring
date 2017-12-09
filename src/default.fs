@@ -1,9 +1,8 @@
 #version 330 core
 out vec4 FragColor;
-in vec2 TexCoords; 
 in vec3 WorldPos;
 in vec3 Normal;
-in vec2 uvFrag;
+in vec2 TexCoords; 
 
 uniform sampler2D tex;
 
@@ -126,7 +125,7 @@ void main()
     // this ambient lighting with environment lighting).
     vec3 ambient = vec3(0.03) * albedo * ao;
 
-    vec4 surfaceColor = texture(tex, uvFrag);
+    vec4 surfaceColor = texture(tex, TexCoords);
     vec3 color = (surfaceColor.rgb * 0.25) + ((ambient + Lo) * 0.75);
 
     // HDR tonemapping

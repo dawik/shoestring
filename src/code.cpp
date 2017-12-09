@@ -1034,8 +1034,8 @@ private:
 
   void spawnStuff() {
     int x, y;
-    for (y = 0; y < 10; y++) {
-      for (x = 0; x < 10; x++) {
+    for (y = 0; y < 16; y++) {
+      for (x = 0; x < 16; x++) {
         btTransform t;
         t.setIdentity();
         t.setOrigin(btVector3(x*2,y*2,0));

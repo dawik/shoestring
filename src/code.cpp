@@ -233,8 +233,22 @@ public:
   {
     if (mesh)
       {
-
         glBindVertexArray (mesh->vao);
+        btVector3 cameraPos = opt.camera.getOrigin();
+        float lightPositions[] = {
+          cameraPos.x(), cameraPos.y(), cameraPos.z(),
+           10.0f,  10.0f, 10.0f,
+          -10.0f, -10.0f, 10.0f,
+           10.0f, -10.0f, 10.0f,
+        };
+        float lightColors[] = {
+          300.0f, 300.0f, 300.0f,
+          300.0f, 300.0f, 300.0f,
+          300.0f, 300.0f, 300.0f,
+          300.0f, 300.0f, 300.0f
+        };
+        glUniform3fv(glGetUniformLocation (mesh->shader, "lightPositions"), 4, lightPositions);
+        glUniform3fv(glGetUniformLocation (mesh->shader, "lightColors"), 4, lightColors);
         glUniform4f (glGetUniformLocation(mesh->shader, "color"), (GLfloat) tint[0], (GLfloat) tint[1], (GLfloat) tint[2], (GLfloat) tint[3]);
         glUniform3f(glGetUniformLocation (mesh->shader, "light.position"), 10000, 10, 1000000);
         glUniform3f(glGetUniformLocation (mesh->shader, "light.intensities"), material->diffuse[0],material->diffuse[0],material->diffuse[0]);
@@ -244,7 +258,6 @@ public:
         glUniform1f(glGetUniformLocation (mesh->shader, "light.ambientCoefficient"), 0.01);
         glUniform1f(glGetUniformLocation (mesh->shader, "materialShininess"), material->shininess);
         glUniform3f(glGetUniformLocation (mesh->shader, "materialSpecularColor"), material->specular[0],material->specular[0],material->specular[0]);
-
         glActiveTexture(GL_TEXTURE2);
         if (mesh->hasTexture)
           {
@@ -817,7 +830,6 @@ private:
       }
     else
       material.texture = 66;
-    printf("SKroutt C %d\n", material.texture);
     aiString _n;
     AIMaterial->Get(AI_MATKEY_NAME, _n);
     AIMaterial->Get(AI_MATKEY_COLOR_DIFFUSE,material.diffuse);

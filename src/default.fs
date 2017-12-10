@@ -13,22 +13,8 @@ const float roughness = 1.0f;
 const float ao = 1.0f;
 
 // lights
-//uniform vec3 lightPositions[4];
-//uniform vec3 lightColors[4];
-const vec3 lightPositions[4] = vec3[](
-	vec3(-10.0f,  10.0f, 10.0f),
-	vec3( 10.0f,  10.0f, 10.0f),
-	vec3(-10.0f, -10.0f, 10.0f),
-	vec3( 10.0f, -10.0f, 10.0f)
-);
-const vec3 lightColors[4] = vec3[](
-	vec3(255f,255f,255f),
-	vec3(255f,255f,255f),
-	vec3(255f,255f,255f),
-	vec3(255f,255f,255f)
-);
-
-
+uniform vec3 lightPositions[4];
+uniform vec3 lightColors[4];
 uniform vec3 camPos;
 
 const float PI = 3.14159265359;

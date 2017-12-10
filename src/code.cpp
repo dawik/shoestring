@@ -512,6 +512,12 @@ private:
     fprintf(stderr, "Error: %s\n", description);
   }
 
+  static void glfwFocusCallback(GLFWwindow *window, int focused)
+  {
+    fprintf(stdout, "Focused: %d\n", focused);
+  }
+
+
   static void glfwMouseCallback(GLFWwindow* window, double x, double y)
   {
     Context *context = static_cast<Context *> (glfwGetWindowUserPointer(window));
@@ -542,11 +548,14 @@ private:
     glfwWindowHint(GLFW_GREEN_BITS, mode->greenBits);
     glfwWindowHint(GLFW_BLUE_BITS, mode->blueBits);
     glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
+    glfwWindowHint(GLFW_AUTO_ICONIFY, 0);
+    glfwWindowHint(GLFW_FOCUSED, 0);
     window = glfwCreateWindow(mode->width, mode->height, "Shoestring", glfwGetPrimaryMonitor(), NULL);
     glfwSetErrorCallback(glfwErrorCallback);
     glfwSetKeyCallback(window, glfwKeyCallback);
     glfwSetMouseButtonCallback(window, glfwMouseButtonCallback);
     glfwSetCursorPosCallback(window, glfwMouseCallback);
+    glfwSetWindowFocusCallback(window, glfwFocusCallback);
     glfwSetWindowUserPointer(window, this);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -902,6 +911,11 @@ private:
     uiText(1, screenWidth, screenHeight, buff);
     snprintf(buff, sizeof(buff), "Object: %s", createObj ? createObj->name.c_str() : "J K to select");
     uiText(2, screenWidth, screenHeight, buff);
+    int nObjects = 1;
+    for (auto &object : objects)
+      nObjects += object.second->bodies.size();
+    snprintf(buff, sizeof(buff), "Objects: %d", nObjects);
+    uiText(3, screenWidth, screenHeight, buff);
   }
 
   void updatePlayer() {
@@ -1050,12 +1064,13 @@ private:
 
   void spawnStuff() {
     int x, y;
-    for (y = 0; y < 100; y++) {
-      for (x = 0; x < 100; x++) {
+    for (y = 0; y < 16; y++) {
+      for (x = 0; x < 16; x++) {
         btTransform t;
         t.setIdentity();
         t.setOrigin(btVector3(x*2,y*2,0));
-        Instance instance = objects["Cube.001"]->addInstance(world, t, 1.0 / objects["Cube.001"]->body->getInvMass(), NULL);
+        //Instance instance = objects["Cube.001"]->addInstance(world, t, 1.0 / objects["Cube.001"]->body->getInvMass(), NULL);
+        Instance instance = objects["Cube.001"]->addInstance(world, t, 10.f, NULL);
         addedInstances.push_back(instance);
       }
     }

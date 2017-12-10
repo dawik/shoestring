@@ -126,7 +126,7 @@ void uiText(int row, float wx, float wy, const char *str) {
   glUniform4fv(uniform_color, 1, black);
 
   glUniform4fv(uniform_color, 1, red);
-  drawText(str, a, -1 + 8 * sx, 1 - (font_size + font_size * row) * sy, sx, sy);
+  drawText(str, a, -1 + 8 * sx, - (font_size + font_size * row) * sy, sx, sy);
   glDisable(GL_BLEND);
 }
 

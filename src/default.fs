@@ -112,12 +112,12 @@ void main()
     vec3 ambient = vec3(0.03) * albedo * ao;
 
     vec4 surfaceColor = texture(tex, TexCoords);
-    vec3 color = (surfaceColor.rgb * 0.25) + ((ambient + Lo) * 0.75);
+    vec3 color = clamp(surfaceColor.rgb+(ambient + Lo), 0f, 1f);
 
     // HDR tonemapping
-    color = color / (color + vec3(1.0));
+    //color = color / (color + vec3(1.0));
     // gamma correct
-    color = pow(color, vec3(1.0/2.2)); 
+    //color = pow(color, vec3(1.0/2.2)); 
 
     FragColor = vec4(color, 1.0);
 }

@@ -236,10 +236,11 @@ public:
         glBindVertexArray (mesh->vao);
         btVector3 cameraPos = opt.camera.getOrigin();
         float lightPositions[] = {
-          cameraPos.x(), cameraPos.y(), cameraPos.z(),
-           10.0f,  10.0f, 10.0f,
-          -10.0f, -10.0f, 10.0f,
-           10.0f, -10.0f, 10.0f,
+          //          cameraPos.x(), cameraPos.y(), cameraPos.z(),
+          10.0f,  10.0f, 10.0f,
+          10.0f,  10.0f, 10.0f,
+          10.0f,  10.0f, 10.0f,
+          10.0f,  10.0f, 10.0f,
         };
         float lightColors[] = {
           300.0f, 300.0f, 300.0f,
@@ -1098,7 +1099,7 @@ public:
     initScene();
     initPhysics();
     initRigidBodies();
-    spawnStuff();
+    //spawnStuff();
     glGetError();
   }
 

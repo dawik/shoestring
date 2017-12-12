@@ -15,7 +15,10 @@ const float ao = 1.0f;
 // lights
 uniform vec3 lightPositions[4];
 uniform vec3 lightColors[4];
+uniform int numLights;
+
 uniform vec3 camPos;
+
 
 const float PI = 3.14159265359;
 // ----------------------------------------------------------------------------
@@ -71,7 +74,7 @@ void main()
 
     // reflectance equation
     vec3 Lo = vec3(0.0);
-    for(int i = 0; i < 4; ++i) 
+    for(int i = 0; i < numLights; ++i) 
     {
         // calculate per-light radiance
         vec3 L = normalize(lightPositions[i] - WorldPos);
@@ -86,7 +89,7 @@ void main()
         vec3 F    = fresnelSchlick(clamp(dot(H, V), 0.0, 1.0), F0);
            
         vec3 nominator    = NDF * G * F; 
-        float denominator = 4 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0);
+        float denominator = numLights * max(dot(N, V), 0.0) * max(dot(N, L), 0.0);
         vec3 specular = nominator / max(denominator, 0.001); // prevent divide by zero for NdotV=0.0 or NdotL=0.0
         
         // kS is equal to Fresnel

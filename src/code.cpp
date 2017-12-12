@@ -45,6 +45,7 @@ struct drawOptions
   bool textured = true;
   bool selected = false;
   btTransform camera;
+  vector<vec3> lightPositions;
 };
 
 class Material
@@ -229,26 +230,20 @@ public:
     return instance;
   }
 
-  void drawBufferr(struct drawOptions opt, Material *material)
+  void drawBufferr(struct drawOptions options, Material *material)
   {
     if (mesh)
       {
         glBindVertexArray (mesh->vao);
-        btVector3 cameraPos = opt.camera.getOrigin();
-        float lightPositions[] = {
-          //          cameraPos.x(), cameraPos.y(), cameraPos.z(),
-          10.0f,  10.0f, 10.0f,
-          10.0f,  10.0f, 10.0f,
-          10.0f,  10.0f, 10.0f,
-          10.0f,  10.0f, 10.0f,
-        };
+        //btVector3 cameraPos = options.camera.getOrigin();
         float lightColors[] = {
           300.0f, 300.0f, 300.0f,
           300.0f, 300.0f, 300.0f,
           300.0f, 300.0f, 300.0f,
           300.0f, 300.0f, 300.0f
         };
-        glUniform3fv(glGetUniformLocation (mesh->shader, "lightPositions"), 4, lightPositions);
+        glUniform3fv(glGetUniformLocation (mesh->shader, "lightPositions"), options.lightPositions.size(), &options.lightPositions[0].x);
+        glUniform1i(glGetUniformLocation (mesh->shader, "numLights"), options.lightPositions.size());
         glUniform3fv(glGetUniformLocation (mesh->shader, "lightColors"), 4, lightColors);
         glUniform4f (glGetUniformLocation(mesh->shader, "color"), (GLfloat) tint[0], (GLfloat) tint[1], (GLfloat) tint[2], (GLfloat) tint[3]);
         glUniform3f(glGetUniformLocation (mesh->shader, "light.position"), 10000, 10, 1000000);
@@ -290,9 +285,9 @@ public:
         glUniform1i(glGetUniformLocation(mesh->shader, "u_tbo_tex"), 5);
         glDrawElementsInstanced( GL_TRIANGLES, (mesh->elements.size()), GL_UNSIGNED_INT, NULL, bodies.size());
 
-        if (opt.selected)
+        if (options.selected)
           {
-            opt.camera.getOpenGLMatrix(mat);
+            options.camera.getOpenGLMatrix(mat);
 
             glUniformMatrix4fv (glGetUniformLocation (mesh->shader, "model"), 1, GL_FALSE, mat);
             glUniform1i(glGetUniformLocation (mesh->shader, "isHighlighted"), 1);
@@ -364,6 +359,7 @@ private:
 
   vector<Material> materials;
   vector<Camera> cameras;
+  vector<vec3> lightPositions;
   unordered_map<string, shared_ptr<Mesh>> meshes;
   unordered_map<string, shared_ptr<Object>> objects;
   vector<Instance> addedInstances;
@@ -609,6 +605,13 @@ private:
         {
           AddMaterial(scene->mMaterials[i]);
         }
+      for (unsigned int i = 0; i < scene->mNumLights; i++)
+        {
+          if (scene->mLights[i]->mType == aiLightSource_POINT) {
+            AddPointLight(scene, scene->mLights[i]);
+          }
+        }
+
 
       for (unsigned int i = 0; i < scene->mNumMeshes; i++)
         {
@@ -861,10 +864,29 @@ private:
       }
   };
 
+  void AddPointLight(const struct aiScene *scene, const aiLight *light)
+  {
+
+    struct aiNode *node = findNode(scene->mRootNode, light->mName.C_Str());
+
+    if (node)
+      {
+        aiMatrix4x4 *mat = &node->mTransformation;
+        mat4 worldTransform = mat4(vec4(mat->a1, mat->a2, mat->a3, mat->a4),
+                            vec4(mat->b1, mat->b2, mat->b3, mat->b4),
+                            vec4(mat->c1, mat->c2, mat->c3, mat->c4),
+                            vec4(mat->d1, mat->d2, mat->d3, mat->d4));
+        btTransform t;
+        t.setFromOpenGLMatrix(value_ptr(transpose(worldTransform)));
+        lightPositions.push_back(vec3(t.getOrigin().x(), t.getOrigin().y(), t.getOrigin().z()));
+        printf("%f %f %f skruttz\n", lightPositions.at(lightPositions.size()-1).x, lightPositions.at(lightPositions.size()-1).y, lightPositions.at(lightPositions.size()-1).z);
+      }
+  };
+
 
   void drawScene()
   {
-    struct drawOptions opt;
+    struct drawOptions options;
     Material defaultMaterial;
     glUseProgram(staticShader);
     glEnable(GL_BLEND);
@@ -885,11 +907,12 @@ private:
 
     for (const auto &object : objects)
       {
-        opt.selected = false;
+        options.selected = false;
+        options.lightPositions = lightPositions;
         if (object.second->mesh->hasTexture)
-          object.second->drawBufferr(opt, &materials.at(object.second->mesh->material_idx));
+          object.second->drawBufferr(options, &materials.at(object.second->mesh->material_idx));
         else
-          object.second->drawBufferr(opt, &defaultMaterial);
+          object.second->drawBufferr(options, &defaultMaterial);
       }
 
     {
@@ -903,10 +926,10 @@ private:
                                               forward.y * summonDistance,
                                               forward.z * summonDistance));
         t.setOrigin(btVector3(round(t.getOrigin().x()),round(t.getOrigin().y()), round(t.getOrigin().z())));
-        opt.camera = t;
-        opt.selected = true;
+        options.camera = t;
+        options.selected = true;
 
-        createObj->drawBufferr(opt, &defaultMaterial);
+        createObj->drawBufferr(options, &defaultMaterial);
       }
     }
 

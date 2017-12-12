@@ -109,10 +109,10 @@ void main()
     
     // ambient lighting (note that the next IBL tutorial will replace 
     // this ambient lighting with environment lighting).
-    vec3 ambient = vec3(0.03) * albedo * ao;
+    vec3 diffuse = vec3(0.5);
+    vec3 ambient = vec3(0.08) * albedo * ao + diffuse;
 
-    vec4 surfaceColor = texture(tex, TexCoords);
-    vec3 color = clamp(surfaceColor.rgb+(ambient + Lo), 0f, 1f);
+    vec3 color = clamp(texture(tex, TexCoords).rgb * (ambient + Lo), 0f, 1f);
 
     // HDR tonemapping
     //color = color / (color + vec3(1.0));

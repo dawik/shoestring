@@ -603,24 +603,24 @@ private:
               scene->mNumMeshes, scene->mNumMaterials, scene->mNumCameras);
       for (unsigned int i = 0; i < scene->mNumMaterials; i++)
         {
-          AddMaterial(scene->mMaterials[i]);
+          addMaterial(scene->mMaterials[i]);
         }
       for (unsigned int i = 0; i < scene->mNumLights; i++)
         {
           if (scene->mLights[i]->mType == aiLightSource_POINT) {
-            AddPointLight(scene, scene->mLights[i]);
+            addPointLight(scene, scene->mLights[i]);
           }
         }
 
 
       for (unsigned int i = 0; i < scene->mNumMeshes; i++)
         {
-          AddMesh(scene->mMeshes[i]);
+          addMesh(scene->mMeshes[i]);
         }
 
       for (unsigned int i = 0; i < scene->mNumCameras; i++)
         {
-          AddCamera(scene, scene->mCameras[i]);
+          addCamera(scene, scene->mCameras[i]);
         }
     }
 
@@ -757,7 +757,7 @@ private:
     return NULL;
   };
 
-  void AddMesh(const aiMesh *AIMesh)
+  void addMesh(const aiMesh *AIMesh)
   {
     shared_ptr<Mesh> mesh(new Mesh());
     mesh->numElements = AIMesh->mNumFaces * 3;
@@ -804,7 +804,7 @@ private:
     meshes[mesh->name] = mesh;
   };
 
-  void AddMaterial(const struct aiMaterial *AIMaterial)
+  void addMaterial(const struct aiMaterial *AIMaterial)
   {
     Material material;
     char filename[2000] = "";
@@ -843,7 +843,7 @@ private:
     materials.push_back(material);
   }
 
-  void AddCamera(const struct aiScene *scene, const aiCamera *AICamera)
+  void addCamera(const struct aiScene *scene, const aiCamera *AICamera)
   {
     Camera camera(string(AICamera->mName.C_Str()),
                   AICamera->mHorizontalFOV * 57.2957795,
@@ -864,7 +864,7 @@ private:
       }
   };
 
-  void AddPointLight(const struct aiScene *scene, const aiLight *light)
+  void addPointLight(const struct aiScene *scene, const aiLight *light)
   {
 
     struct aiNode *node = findNode(scene->mRootNode, light->mName.C_Str());

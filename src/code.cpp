@@ -181,6 +181,7 @@ public:
     tint[2] = 1.0;
     tint[3] = 1.0;
     shape = _body->getCollisionShape();
+    shape->setLocalScaling(btVector3(-1,-1,1));
   }
 
   Object(const char *_name, btRigidBody* _body, shared_ptr<Mesh> _mesh, float _tint[4])
@@ -193,6 +194,7 @@ public:
     tint[2] =_tint[2];
     tint[3] =_tint[3];
     shape = _body->getCollisionShape();
+    shape->setLocalScaling(btVector3(-1,-1,1));
   }
 
 
@@ -763,14 +765,14 @@ private:
     mesh->numElements = AIMesh->mNumFaces * 3;
     for (unsigned int j = 0; j < AIMesh->mNumVertices; j++)
       {
-        mesh->vertexdata.push_back(AIMesh->mVertices[j].x);
-        mesh->vertexdata.push_back(AIMesh->mVertices[j].y);
+        mesh->vertexdata.push_back(-AIMesh->mVertices[j].x);
+        mesh->vertexdata.push_back(-AIMesh->mVertices[j].y);
         mesh->vertexdata.push_back(AIMesh->mVertices[j].z);
 
         if (AIMesh->mNormals)
           {
-            mesh->vertexdata.push_back(AIMesh->mNormals[j].x);
-            mesh->vertexdata.push_back(AIMesh->mNormals[j].y);
+            mesh->vertexdata.push_back(-AIMesh->mNormals[j].x);
+            mesh->vertexdata.push_back(-AIMesh->mNormals[j].y);
             mesh->vertexdata.push_back(AIMesh->mNormals[j].z);
           }
 
@@ -876,6 +878,20 @@ private:
                             vec4(mat->b1, mat->b2, mat->b3, mat->b4),
                             vec4(mat->c1, mat->c2, mat->c3, mat->c4),
                             vec4(mat->d1, mat->d2, mat->d3, mat->d4));
+        while (1) {
+          if (node->mParent) {
+            node = node->mParent;
+            mat = &node->mTransformation;
+            mat4 parentTransform = mat4(vec4(mat->a1, mat->a2, mat->a3, mat->a4),
+                                       vec4(mat->b1, mat->b2, mat->b3, mat->b4),
+                                       vec4(mat->c1, mat->c2, mat->c3, mat->c4),
+                                       vec4(mat->d1, mat->d2, mat->d3, mat->d4));
+            worldTransform = parentTransform * worldTransform;
+            printf("Skroutt\n");
+          } else {
+            break;
+          }
+        }
         btTransform t;
         t.setFromOpenGLMatrix(value_ptr(transpose(worldTransform)));
         lightPositions.push_back(vec3(t.getOrigin().x(), t.getOrigin().y(), t.getOrigin().z()));

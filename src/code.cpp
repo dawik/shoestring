@@ -59,6 +59,10 @@ private:
   float shininess = 0.1;
   float diffuse[4] = {1,1,1,1};
   float specular[4] = {1,1,1,1};
+  bool isPBR;
+  struct pbrMaps {
+    unsigned int normal, ao, height; 
+  } maps;
 };
 
 class Mesh
@@ -261,6 +265,11 @@ public:
           {
             glEnable(GL_TEXTURE_2D);
             glBindTexture(GL_TEXTURE_2D, mesh->texture);
+            if (material->isPBR) {
+              glBindTexture(GL_TEXTURE_2D, mesh->maps.ao);
+              glBindTexture(GL_TEXTURE_2D, mesh->maps.normal);
+              glBindTexture(GL_TEXTURE_2D, mesh->maps.height);
+            }
           }
         else
           {
@@ -605,7 +614,14 @@ private:
               scene->mNumMeshes, scene->mNumMaterials, scene->mNumCameras);
       for (unsigned int i = 0; i < scene->mNumMaterials; i++)
         {
-          addMaterial(scene->mMaterials[i]);
+          struct aiString str;
+          if (!aiGetMaterialString(scene->mMaterials[i], AI_MATKEY_TEXTURE_DIFFUSE(0), &str)) {
+            if (strstr(str.data, "pbr")) {
+              addMaterialPBR(scene->mMaterials[i]);
+            } else {
+              addMaterial(scene->mMaterials[i]);
+            }
+          }
         }
       for (unsigned int i = 0; i < scene->mNumLights; i++)
         {
@@ -845,6 +861,58 @@ private:
     materials.push_back(material);
   }
 
+  void addMaterialPBR(const struct aiMaterial *AIMaterial)
+  {
+    Material material;
+    material.isPBR = true;
+    char filename[2000] = "";
+    char fileending[4] = "";
+    struct aiString str;
+    if (!aiGetMaterialString(AIMaterial, AI_MATKEY_TEXTURE_DIFFUSE(0), &str))
+      {
+        char *s = strrchr(str.data, '/');
+        if (!s) s = strrchr(str.data, '\\');
+        if (!s) s = str.data; else s++;
+        strcpy(filename, "assets/");
+        strcat(filename, str.data);
+        material.bitmap_file = string(filename);
+        bool duplicateTexture = false;
+        for(Material &m : materials)
+          {
+            if (strcmp(filename, m.bitmap_file.c_str()) == 0)
+              {
+                material.texture = m.texture;
+                duplicateTexture = true;
+                break;
+              }
+          }
+        if (!duplicateTexture)
+          {
+            for (int i = strlen(str.data)-3, j = 0; i < strlen(str.data); i++) {
+              fileending[j++] = str.data[i];
+            }
+            fileending[3] = '\0';
+            material.texture = load_texture(filename);
+            filename[strlen(filename) - 4] = '\0';
+            char buffer[2048];
+            sprintf(buffer, "%s_ao.%s", filename, fileending);
+            material.maps.ao = load_texture(buffer);
+            sprintf(buffer, "%s_height.%s", filename, fileending);
+            material.maps.height = load_texture(buffer);
+            sprintf(buffer, "%s_normal.%s", filename, fileending);
+            material.maps.normal = load_texture(buffer);
+          }
+      }
+    else
+      material.texture = 66;
+    aiString _n;
+    AIMaterial->Get(AI_MATKEY_NAME, _n);
+    AIMaterial->Get(AI_MATKEY_COLOR_DIFFUSE,material.diffuse);
+    AIMaterial->Get(AI_MATKEY_COLOR_SPECULAR,material.specular);
+    AIMaterial->Get(AI_MATKEY_SHININESS,material.shininess);
+    material.name = string(_n.data);
+    materials.push_back(material);
+  }
   void addCamera(const struct aiScene *scene, const aiCamera *AICamera)
   {
     Camera camera(string(AICamera->mName.C_Str()),

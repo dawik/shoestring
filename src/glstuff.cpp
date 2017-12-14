@@ -32,7 +32,7 @@ GLuint load_texture(char *file)
   image = stbi_load(file, &w, &h, &n, 0);
 
   if (!image) {
-    fprintf(stderr, "cannot load texture '%s'\n", file);
+    fprintf(stderr, "cannot load texture '%s'\n %s\n", file, stbi_failure_reason());
     return 0;
   } else {
     printf("%s w:%d h:%d comp:%d\n", file, w, h, n);
